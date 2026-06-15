@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ipynb_checkpoints/
+
+# SQLite transient files — NOTE: data/worldcup.db itself IS committed (shared artifact)
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Secrets — defensive only; by design no .env ever exists inside the repo tree
+.env
+
+# macOS
+.DS_Store

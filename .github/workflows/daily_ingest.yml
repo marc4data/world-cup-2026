@@ -1,0 +1,26 @@
+name: Daily Ingest
+
+# M0 scaffold: cron + manual trigger are wired, but the job is a no-op for now.
+# The real incremental load + DB commit is implemented in M5.
+
+on:
+  schedule:
+    # 08:00 UTC daily — comfortably after US-midnight so the previous-day
+    # cutoff (America/Los_Angeles) has rolled over. (spec §8)
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Ingest mode"
+        type: choice
+        options:
+          - incremental
+          - backfill
+        default: incremental
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder
+        run: echo "M0 scaffold — no-op. Ingest pipeline is wired in M5 (mode=${{ inputs.mode || 'incremental' }})."
