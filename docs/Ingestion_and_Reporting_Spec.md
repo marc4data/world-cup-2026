@@ -312,3 +312,15 @@ Assumes solo work; "with Claude" = pairing in this environment.
 3. GitHub Action runs daily on cron and on-demand via manual dispatch, committing refreshed data.
 4. `01_group_breakdown.ipynb` renders the 4×3 small-multiples view with standings + schedule (location, weather, projected winner/%, final scores) for all 12 groups.
 ```
+
+---
+
+## 14. Live-API deviations (verified against real responses — M2, 2026-06-15)
+
+Findings from eyeballing live API-Football v3 responses. Where the API contradicts an earlier assumption, **the API wins** and the code follows these notes.
+
+- **D1 — Free plan cannot access `season=2026`.** The API returns `{'plan': 'Free plans do not have access to this season, try from 2022 to 2024.'}`. The "API plan = Free" decision is therefore insufficient for the live target; a **paid plan** is required to ingest 2026 (the same `APISPORTS_KEY` is upgraded in place). JSON shapes are season-identical, so M2 was shape-verified against `season=2022` (WC Qatar). With a paid plan the free-tier rate caps (10 predictions/run, etc.) become safety-only.
+- **D2 — `fixture.venue.id` is usually `null`.** In WC2022 only 1 of 8 match venues carried an id. Venue identity is therefore **name-based**, driven by `venues_geo.csv`: M3 assigns stable `venue_id`s from the CSV and resolves `fixture.venue_id` by matching `fixture.venue.name` (alias map added if 2026 FIFA names differ from stadium names). `/teams.venue` is each nation's **home** stadium, not a WC venue — ignore it for match venues.
+- **D3 — Prediction percents are strings.** `predictions.percent = {'home':'45%','draw':'45%','away':'10%'}` → strip `%` and cast to int for `pct_home/draw/away`. Winner at `predictions.winner.{id,name}`, advice at `predictions.advice`.
+- **D4 — Group letter confirmed derivable from `/standings`.** `standing.group` = `"Group A".."Group L"`; fixtures expose only `league.round` (`"Group Stage - 1"`), so label group-stage fixtures via the team→group map (spec §6.3).
+- **D5 — Tournament size differs by edition.** WC2022 = 32 teams / 8 groups (A–H) / 64 matches; WC2026 = 48 teams / 12 groups (A–L) / 104 matches. The M6 report must derive group count from the data, not hard-code 12, so it renders correctly for whichever season is loaded.
