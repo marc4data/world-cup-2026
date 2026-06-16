@@ -10,6 +10,8 @@ and is never logged.
 from __future__ import annotations
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 from config import (
     API_BASE_URL,
@@ -48,6 +50,12 @@ class APIFootball:
 
         self.session = session or requests.Session()
         self.session.headers.update({API_KEY_HEADER: self._api_key})
+        # Retry transient network/5xx errors so one blip doesn't fail a run.
+        retry = Retry(
+            total=3, connect=3, read=3, backoff_factor=0.6,
+            status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",),
+        )
+        self.session.mount("https://", HTTPAdapter(max_retries=retry))
 
     # -- core ---------------------------------------------------------------
     def _get(self, endpoint: str, params: dict | None = None) -> list:

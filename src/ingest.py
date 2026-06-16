@@ -17,6 +17,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
+
 import db
 import integrity
 import openmeteo
@@ -70,6 +72,7 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
     captured = _now_utc_iso()
     new_predictions = 0
     predictions_probed = 0
+    optional_errors = 0
     for fr in fixture_rows:
         if predictions_probed >= max_predictions:
             break
@@ -77,7 +80,11 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
         if fr["is_finished"] or fid in cached:
             continue
         predictions_probed += 1
-        prow = transform.transform_prediction(api.get_prediction(fid), fid, captured)
+        try:  # predictions are best-effort — never fail the run over one
+            prow = transform.transform_prediction(api.get_prediction(fid), fid, captured)
+        except requests.RequestException:
+            optional_errors += 1
+            continue
         if prow:
             db.upsert(conn, "prediction", [prow], ["fixture_id"], update=False)
             new_predictions += 1
@@ -107,8 +114,12 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
         if fr["is_finished"] and prior is not None:
             continue
         kickoff = datetime.fromisoformat(fr["kickoff_utc"])
-        wx = openmeteo.fetch_weather(geo["latitude"], geo["longitude"], kickoff,
-                                     today=weather_today)
+        try:  # weather is best-effort — degrade gracefully, retry next run
+            wx = openmeteo.fetch_weather(geo["latitude"], geo["longitude"], kickoff,
+                                         today=weather_today)
+        except requests.RequestException:
+            optional_errors += 1
+            continue
         if not wx:
             continue
         new_vals = (wx["temp_c"], wx["precip_mm"], wx["wind_kmh"], wx["code"])
@@ -127,7 +138,8 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
                    f"predictions_probed={predictions_probed}",
                    f"new_predictions={new_predictions}",
                    f"weather_added={weather_added}",
-                   f"weather_updated={weather_updated}"]
+                   f"weather_updated={weather_updated}",
+                   f"optional_errors={optional_errors}"]
     if unmatched_venues:
         notes_parts.append("unmatched_venues=" + "|".join(sorted(unmatched_venues)))
     db.insert_row(conn, "load_run", {
@@ -158,6 +170,7 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
         "new_predictions": new_predictions,
         "weather_added": weather_added,
         "weather_updated": weather_updated,
+        "optional_errors": optional_errors,
         "unmatched_venues": sorted(unmatched_venues),
         "errors": report.errors,
         "warnings": report.warnings,
@@ -189,6 +202,8 @@ def main(argv=None) -> int:
           f"standings={summary['standings']} "
           f"predictions={summary['new_predictions']} (probed {summary['predictions_probed']}) "
           f"weather_added={summary['weather_added']} weather_updated={summary['weather_updated']}")
+    if summary["optional_errors"]:
+        print(f"  {summary['optional_errors']} optional fetch error(s) skipped (weather/predictions best-effort)")
     if summary["unmatched_venues"]:
         print("  WARN unmatched venues:", summary["unmatched_venues"])
     if summary["warnings"]:

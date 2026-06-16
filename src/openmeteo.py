@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -34,6 +36,24 @@ WMO_SUMMARY = {
     85: "Snow showers", 86: "Snow showers",
     95: "Thunderstorm", 96: "Thunderstorm w/ hail", 99: "Thunderstorm w/ hail",
 }
+
+
+def build_session() -> requests.Session:
+    """A session that retries transient network/5xx errors with backoff.
+
+    Open-Meteo occasionally read-times-out on a busy runner; retrying a few GETs
+    keeps a single blip from losing weather for the whole run.
+    """
+    retry = Retry(
+        total=3, connect=3, read=3, backoff_factor=0.6,
+        status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",),
+    )
+    s = requests.Session()
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    return s
+
+
+_DEFAULT_SESSION = build_session()
 
 
 def choose_source(kickoff_date: date, today: date) -> str:
@@ -75,7 +95,7 @@ def fetch_weather(
         "wind_speed_unit": "kmh",
         "precipitation_unit": "mm",
     }
-    client = session or requests
+    client = session or _DEFAULT_SESSION
     resp = client.get(url, params=params, timeout=timeout)
     resp.raise_for_status()
     hourly = (resp.json() or {}).get("hourly") or {}
