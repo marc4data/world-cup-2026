@@ -19,6 +19,7 @@ from pathlib import Path
 
 import db
 import integrity
+import openmeteo
 import transform
 from apifootball import APIFootball
 from config import CUTOFF_TZ, DB_PATH, MAX_NEW_PREDICTIONS_PER_RUN
@@ -81,14 +82,35 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
             db.upsert(conn, "prediction", [prow], ["fixture_id"], update=False)
             new_predictions += 1
 
-    # 6) Weather is added in M4 (no-op here).
+    # 6) Weather (Open-Meteo, free): fetch-if-missing per fixture with a known
+    #    venue. Archive for past, forecast for near-term; far-future returns None
+    #    and is left blank to be filled on a later run (spec §3.2 / §12 graceful).
+    venue_geo = {v["venue_id"]: v for v in venue_rows}
+    have_weather = {r[0] for r in conn.execute("SELECT fixture_id FROM weather")}
+    weather_today = datetime.now(timezone.utc).date()
+    weather_added = 0
+    for fr in fixture_rows:
+        fid, vid = fr["fixture_id"], fr["venue_id"]
+        if vid is None or fid in have_weather:
+            continue
+        geo = venue_geo.get(vid)
+        if not geo:
+            continue
+        kickoff = datetime.fromisoformat(fr["kickoff_utc"])
+        wx = openmeteo.fetch_weather(geo["latitude"], geo["longitude"], kickoff,
+                                     today=weather_today)
+        if wx:
+            db.upsert(conn, "weather", [{"fixture_id": fid, **wx, "captured_at": captured}],
+                      ["fixture_id"])
+            weather_added += 1
 
     # 7) Audit row.
     calls_used = api.calls_used - calls_before
     finished_count = sum(fr["is_finished"] for fr in fixture_rows)
     notes_parts = [f"finished={finished_count}",
                    f"predictions_probed={predictions_probed}",
-                   f"new_predictions={new_predictions}"]
+                   f"new_predictions={new_predictions}",
+                   f"weather_added={weather_added}"]
     if unmatched_venues:
         notes_parts.append("unmatched_venues=" + "|".join(sorted(unmatched_venues)))
     db.insert_row(conn, "load_run", {
@@ -117,6 +139,7 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
         "standings": len(standing_rows),
         "predictions_probed": predictions_probed,
         "new_predictions": new_predictions,
+        "weather_added": weather_added,
         "unmatched_venues": sorted(unmatched_venues),
         "errors": report.errors,
         "warnings": report.warnings,
@@ -146,7 +169,8 @@ def main(argv=None) -> int:
     print(f"  teams={summary['teams']} venues={summary['venues']} "
           f"fixtures={summary['fixtures']} finished={summary['finished']} "
           f"standings={summary['standings']} "
-          f"predictions={summary['new_predictions']} (probed {summary['predictions_probed']})")
+          f"predictions={summary['new_predictions']} (probed {summary['predictions_probed']}) "
+          f"weather_added={summary['weather_added']}")
     if summary["unmatched_venues"]:
         print("  WARN unmatched venues:", summary["unmatched_venues"])
     if summary["warnings"]:
