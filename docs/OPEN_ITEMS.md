@@ -32,7 +32,10 @@ Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
   are created as teams qualify. The report handles the group stage; knockout reporting is future.
 - 🟢 **M7 — Phase 2 scaffold** (`/players`, `/fixtures/players`) still pending, rate-limit-aware.
 
-## Report polish (first-pass feedback parking)
-- 🟢 Candidate enhancements: visually distinguish finished vs upcoming rows; surface the
-  predicted winner's name (not just %); optional color/heat for results; per-group "matches
-  played" badge. Gather feedback from this first pass before investing.
+## Report polish
+- ✅ **Redesigned (2026-06-16):** single landscape page, tabular schedule, weather as
+  icon + °F, time-proximity colour scheme (today pops, past warm / future cool),
+  winners bold-green & projected favourites bold-blue, top-2 qualification tint, legend.
+- 🟢 Remaining ideas: prediction-vs-actual ✓/✗ on finished rows (limited by D7 coverage);
+  per-group "matches played N/6" badge; verify single-page fit on an actual letter-landscape
+  print (currently 16×9 screen ratio — may want exact 11×8.5 export for the printer).
