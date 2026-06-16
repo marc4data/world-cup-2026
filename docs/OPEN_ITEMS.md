@@ -22,8 +22,8 @@ Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
 ## Pipeline / ops
 - 🔴 **GitHub Actions Node 20 deprecation.** `actions/checkout@v4` + `setup-python@v5`
   warn about the Node 20→24 migration. Bump action versions to silence.
-- 🟡 **Cron not yet observed firing.** Only `workflow_dispatch` runs are proven green; the
-  08:00 UTC schedule should produce its first auto-commit — verify after it fires.
+- 🟢 ✅ **Cron verified.** The scheduled run fired 2026-06-16 12:54 UTC (GitHub delays
+  schedules under load) and auto-committed a DB refresh. Both trigger paths now proven.
 - 🟢 **`jupyter`/`nbconvert` not in `requirements.txt`.** Add them if one-command notebook
   reproducibility is wanted (they're not pipeline deps, so CI install stays lean).
 
