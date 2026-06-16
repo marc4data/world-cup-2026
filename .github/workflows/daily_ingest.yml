@@ -1,12 +1,13 @@
 name: Daily Ingest
 
-# M0 scaffold: cron + manual trigger are wired, but the job is a no-op for now.
-# The real incremental load + DB commit is implemented in M5.
+# Runs the incremental load daily and on demand, then commits the refreshed
+# SQLite database. The job FAILS (non-zero) if integrity checks fail, so bad
+# data is never committed (spec §8 failure handling).
 
 on:
   schedule:
-    # 08:00 UTC daily — comfortably after US-midnight so the previous-day
-    # cutoff (America/Los_Angeles) has rolled over. (spec §8)
+    # 08:00 UTC = 01:00 PT (PDT) — just after the PT cutoff day has rolled over,
+    # so "finished as of the previous day" is stable.
     - cron: "0 8 * * *"
   workflow_dispatch:
     inputs:
@@ -18,9 +19,46 @@ on:
           - backfill
         default: incremental
 
+# Allow the job to push the refreshed database back to the repo.
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-ingest
+  cancel-in-progress: false
+
 jobs:
-  noop:
+  ingest:
     runs-on: ubuntu-latest
     steps:
-      - name: Placeholder
-        run: echo "M0 scaffold — no-op. Ingest pipeline is wired in M5 (mode=${{ inputs.mode || 'incremental' }})."
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run ingest (${{ github.event.inputs.mode || 'incremental' }})
+        env:
+          # Resolved from os.environ first (config.py step 1); the central .env
+          # is absent on the runner, which is fine.
+          APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+        run: python src/ingest.py --mode "${{ github.event.inputs.mode || 'incremental' }}"
+
+      - name: Commit refreshed database
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/worldcup.db
+          if git diff --staged --quiet; then
+            echo "No database changes to commit."
+          else
+            mode="${{ github.event.inputs.mode || 'incremental' }}"
+            git commit -m "data: refresh worldcup.db ($mode, $(date -u +%Y-%m-%dT%H:%MZ)) [skip ci]"
+            git push
+          fi

@@ -86,23 +86,39 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
     #    venue. Archive for past, forecast for near-term; far-future returns None
     #    and is left blank to be filled on a later run (spec §3.2 / §12 graceful).
     venue_geo = {v["venue_id"]: v for v in venue_rows}
-    have_weather = {r[0] for r in conn.execute("SELECT fixture_id FROM weather")}
+    existing_weather = {
+        r["fixture_id"]: (r["temp_c"], r["precip_mm"], r["wind_kmh"], r["code"])
+        for r in conn.execute("SELECT fixture_id, temp_c, precip_mm, wind_kmh, code FROM weather")
+    }
     weather_today = datetime.now(timezone.utc).date()
-    weather_added = 0
+    weather_added = weather_updated = 0
     for fr in fixture_rows:
         fid, vid = fr["fixture_id"], fr["venue_id"]
-        if vid is None or fid in have_weather:
+        if vid is None:
             continue
         geo = venue_geo.get(vid)
         if not geo:
             continue
+        prior = existing_weather.get(fid)
+        # Finished matches: archive value is final — fetch once, then leave alone.
+        # Upcoming matches: re-fetch every run so the forecast sharpens toward
+        # kickoff. captured_at is bumped only when the values actually change, so
+        # a same-run re-run stays idempotent and CI doesn't churn the DB needlessly.
+        if fr["is_finished"] and prior is not None:
+            continue
         kickoff = datetime.fromisoformat(fr["kickoff_utc"])
         wx = openmeteo.fetch_weather(geo["latitude"], geo["longitude"], kickoff,
                                      today=weather_today)
-        if wx:
-            db.upsert(conn, "weather", [{"fixture_id": fid, **wx, "captured_at": captured}],
-                      ["fixture_id"])
+        if not wx:
+            continue
+        new_vals = (wx["temp_c"], wx["precip_mm"], wx["wind_kmh"], wx["code"])
+        if prior is None:
+            db.upsert(conn, "weather", [{"fixture_id": fid, **wx, "captured_at": captured}], ["fixture_id"])
             weather_added += 1
+        elif new_vals != prior:
+            db.upsert(conn, "weather", [{"fixture_id": fid, **wx, "captured_at": captured}], ["fixture_id"])
+            weather_updated += 1
+        # else: forecast unchanged -> no write
 
     # 7) Audit row.
     calls_used = api.calls_used - calls_before
@@ -110,7 +126,8 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
     notes_parts = [f"finished={finished_count}",
                    f"predictions_probed={predictions_probed}",
                    f"new_predictions={new_predictions}",
-                   f"weather_added={weather_added}"]
+                   f"weather_added={weather_added}",
+                   f"weather_updated={weather_updated}"]
     if unmatched_venues:
         notes_parts.append("unmatched_venues=" + "|".join(sorted(unmatched_venues)))
     db.insert_row(conn, "load_run", {
@@ -140,6 +157,7 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
         "predictions_probed": predictions_probed,
         "new_predictions": new_predictions,
         "weather_added": weather_added,
+        "weather_updated": weather_updated,
         "unmatched_venues": sorted(unmatched_venues),
         "errors": report.errors,
         "warnings": report.warnings,
@@ -170,7 +188,7 @@ def main(argv=None) -> int:
           f"fixtures={summary['fixtures']} finished={summary['finished']} "
           f"standings={summary['standings']} "
           f"predictions={summary['new_predictions']} (probed {summary['predictions_probed']}) "
-          f"weather_added={summary['weather_added']}")
+          f"weather_added={summary['weather_added']} weather_updated={summary['weather_updated']}")
     if summary["unmatched_venues"]:
         print("  WARN unmatched venues:", summary["unmatched_venues"])
     if summary["warnings"]:
