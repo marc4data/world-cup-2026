@@ -17,6 +17,96 @@ notebook reports — starting with a per-group breakdown.
 - Runs daily via GitHub Actions and commits the refreshed database
 - Renders a 4×3 small-multiples group report (`reports/01_group_breakdown.ipynb`)
 
+## Data model
+
+SQLite (`data/worldcup.db`). Integrity is structural — `PRAGMA foreign_keys=ON`,
+every FK enforced, parents loaded before children, all writes idempotent upserts.
+`predictions` are immutable once captured (the pre-match projection is preserved
+for prediction-vs-actual analysis).
+
+```mermaid
+erDiagram
+    TEAM     ||--o{ FIXTURE    : "home / away"
+    VENUE    ||--o{ FIXTURE    : "hosts"
+    TEAM     ||--o{ STANDING   : "ranked in"
+    FIXTURE  ||--o| PREDICTION : "pre-match forecast"
+    FIXTURE  ||--o| WEATHER    : "kickoff conditions"
+
+    TEAM {
+        int  team_id PK
+        text name
+        text code
+        text country
+        int  is_national
+    }
+    VENUE {
+        int  venue_id PK
+        text name
+        text city
+        real latitude
+        real longitude
+    }
+    FIXTURE {
+        int  fixture_id PK
+        int  season
+        int  league_id
+        text round
+        text group_label "derived from standings"
+        text kickoff_utc
+        text status_short "FT/AET/PEN/NS/..."
+        int  is_finished
+        int  venue_id FK
+        int  home_team_id FK
+        int  away_team_id FK
+        int  home_goals
+        int  away_goals
+    }
+    STANDING {
+        int  season PK
+        int  league_id PK
+        text group_label PK
+        int  team_id PK,FK
+        int  rank
+        int  played
+        int  win
+        int  draw
+        int  lose
+        int  goals_for
+        int  goals_against
+        int  goals_diff
+        int  points
+    }
+    PREDICTION {
+        int  fixture_id PK,FK
+        int  predicted_winner_team_id
+        int  pct_home
+        int  pct_draw
+        int  pct_away
+        text advice
+        text captured_at
+    }
+    WEATHER {
+        int  fixture_id PK,FK
+        text source "open-meteo-archive|forecast"
+        int  is_forecast
+        real temp_c
+        real precip_mm
+        real wind_kmh
+        int  code "WMO"
+        text summary
+    }
+```
+
+| Table | Grain | Key columns | Notes |
+|---|---|---|---|
+| `team` | one national team | `team_id` | the 48 nations |
+| `venue` | one stadium | `venue_id` | id assigned from `venues_geo.csv`; lat/long for weather |
+| `fixture` | one match | `fixture_id` | `group_label` derived from `standing`; `is_finished` per the PT cutoff rule |
+| `standing` | a team's row in a group table | `(season, league_id, group_label, team_id)` | overwritten each run |
+| `prediction` | pre-match forecast | `fixture_id` | **immutable** once stored |
+| `weather` | kickoff conditions | `fixture_id` | archive for past, forecast for upcoming |
+| `load_run` | one ingest run | `run_id` | audit / watermark (calls used, counts, status) |
+
 ## Repository layout
 
 ```
