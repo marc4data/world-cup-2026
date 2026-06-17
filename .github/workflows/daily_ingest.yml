@@ -50,13 +50,16 @@ jobs:
           APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
         run: python src/ingest.py --mode "${{ github.event.inputs.mode || 'incremental' }}"
 
-      - name: Commit refreshed database
+      - name: Refresh Excel export
+        run: python src/export_excel.py
+
+      - name: Commit refreshed data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/worldcup.db
+          git add data/worldcup.db reports/worldcup_tables.xlsx
           if git diff --staged --quiet; then
-            echo "No database changes to commit."
+            echo "No data changes to commit."
           else
             mode="${{ github.event.inputs.mode || 'incremental' }}"
             git commit -m "data: refresh worldcup.db ($mode, $(date -u +%Y-%m-%dT%H:%MZ)) [skip ci]"

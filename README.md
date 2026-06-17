@@ -159,6 +159,8 @@ data/
   worldcup.db                        # committed SQLite artifact
   venues_geo.csv                     # 16 venue lat/long lookup (M1)
 reports/01_group_breakdown.ipynb     # group report (M6)
+reports/02_top_scorers.ipynb         # top-scorers report (Phase 2)
+reports/worldcup_tables.xlsx         # one-sheet-per-table export (auto-refreshed)
 docs/                                # spec + API endpoint guide (source of truth)
 tests/                               # pytest: upsert idempotency, orphan detection
 ```

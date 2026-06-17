@@ -1,0 +1,71 @@
+name: Weekly Player Stats
+
+# Phase 2 player pulls run on their own (weekly) cadence — kept off the daily job
+# so the larger /players + /fixtures/players calls don't run every day. Refreshes
+# player / player_season_stat / fixture_player_stat, regenerates the Excel export,
+# and commits. Fails (and commits nothing) if integrity checks fail.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Player ingest mode"
+        type: choice
+        options:
+          - both
+          - season
+          - fixtures
+        default: both
+      max_fixtures:
+        description: "Max /fixtures/players pulls this run"
+        type: string
+        default: "20"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-players
+  cancel-in-progress: false
+
+jobs:
+  players:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run player ingest (${{ github.event.inputs.mode || 'both' }})
+        env:
+          APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+        run: |
+          python src/players_ingest.py \
+            --mode "${{ github.event.inputs.mode || 'both' }}" \
+            --max-fixtures "${{ github.event.inputs.max_fixtures || '20' }}"
+
+      - name: Refresh Excel export
+        run: python src/export_excel.py
+
+      - name: Commit refreshed data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/worldcup.db reports/worldcup_tables.xlsx
+          if git diff --staged --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "data: refresh player stats ($(date -u +%Y-%m-%dT%H:%MZ)) [skip ci]"
+            git push
+          fi

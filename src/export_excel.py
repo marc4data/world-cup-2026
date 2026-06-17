@@ -25,9 +25,13 @@ DEFAULT_OUT = REPO_ROOT / "reports" / "worldcup_tables.xlsx"
 
 
 def list_tables(conn: sqlite3.Connection) -> list[str]:
-    """User tables in the DB (excludes SQLite internals), alphabetical."""
+    """Every user table AND view in the DB (excludes SQLite internals).
+
+    Schema-driven on purpose: any new table or view added later is exported
+    automatically, no change needed here.
+    """
     return [r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' "
+        "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') "
         "AND name NOT LIKE 'sqlite_%' ORDER BY name"
     )]
 
