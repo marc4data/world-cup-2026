@@ -66,3 +66,15 @@ def get_api_key() -> str:
             f"(format: APISPORTS_KEY=...), or export it / set WC2026_ENV_FILE."
         )
     return key
+
+
+def get_gnews_key() -> str | None:
+    """Return the GNews API key (ER-6), or None if not configured.
+
+    News is an optional enhancement, so this returns None rather than raising —
+    callers skip news ingestion gracefully when no key is present. Read from the
+    environment only (central .env or an exported var); never logged.
+    """
+    if not os.environ.get("GNEWS_KEY") and CENTRAL_ENV_PATH.exists():
+        load_dotenv(CENTRAL_ENV_PATH, override=False)
+    return (os.environ.get("GNEWS_KEY") or "").strip() or None

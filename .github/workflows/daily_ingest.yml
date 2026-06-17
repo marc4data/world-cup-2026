@@ -50,6 +50,11 @@ jobs:
           APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
         run: python src/ingest.py --mode "${{ github.event.inputs.mode || 'incremental' }}"
 
+      - name: Refresh per-match news (ER-6, capped; skips if no key)
+        env:
+          GNEWS_KEY: ${{ secrets.GNEWS_KEY }}
+        run: python src/news_ingest.py --max-fixtures 10
+
       - name: Refresh Excel export
         run: python src/export_excel.py
 

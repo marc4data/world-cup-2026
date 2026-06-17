@@ -203,6 +203,18 @@ CREATE TABLE IF NOT EXISTS team_history (
   FOREIGN KEY (team_id) REFERENCES team(team_id)
 );
 
+CREATE TABLE IF NOT EXISTS news (        -- ER-6: per-match news links
+  fixture_id   INTEGER NOT NULL,
+  seq          INTEGER NOT NULL,         -- 1..N article rank
+  title        TEXT,
+  url          TEXT,
+  source       TEXT,
+  published_at TEXT,
+  captured_at  TEXT,
+  PRIMARY KEY (fixture_id, seq),
+  FOREIGN KEY (fixture_id) REFERENCES fixture(fixture_id)
+);
+
 CREATE TABLE IF NOT EXISTS load_run (
   run_id      INTEGER PRIMARY KEY AUTOINCREMENT,
   run_type    TEXT,

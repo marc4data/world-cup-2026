@@ -35,6 +35,7 @@ _FOREIGN_KEYS = [
     ("fixture_team_stat", "fixture_id", "fixture", "fixture_id"),
     ("fixture_team_stat", "team_id", "team", "team_id"),
     ("team_history", "team_id", "team", "team_id"),
+    ("news", "fixture_id", "fixture", "fixture_id"),
 ]
 
 # (table, primary-key columns) for the duplicate-PK sweep.
@@ -52,6 +53,7 @@ _PRIMARY_KEYS = [
     ("event", ["fixture_id", "seq"]),
     ("fixture_team_stat", ["fixture_id", "team_id"]),
     ("team_history", ["team_id"]),
+    ("news", ["fixture_id", "seq"]),
 ]
 
 

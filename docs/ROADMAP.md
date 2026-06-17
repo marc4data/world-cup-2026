@@ -29,7 +29,7 @@ pipeline today without the web frontend.
 | **ER-3** | Authoritative venue capacities | `venue.capacity` ← `venues_geo.csv` | FIFA figures + Wikidata | ✅ yes | Low | ✅ **done** |
 | **ER-4** | Venue enrichment (image, year, history) | `venue` columns ← `venues_enrich.csv` (fetched by `venue_enrich.py`) | Wikidata QID + Commons + Wikipedia | ✅ yes (static) | Med | ✅ **done** |
 | **ER-5** | Team World Cup history (titles, appearances) | `team_history` table ← `team_history.csv` (static) | curated seed; verify vs jfjelstul | ✅ yes | Low–Med | ✅ **done** (curated seed) |
-| **ER-6** | Per-match news links | new `news` table | GNews/NewsAPI (needs key) | ⚠️ needs a news API key | Low | 🟢 proposed |
+| **ER-6** | Per-match news links | `news` table ← `news_ingest.py` (GNews) | GNews (key stored) | ✅ yes | Low | ✅ **done** |
 | **ER-7** | Goal highlight clips (embed) | frontend feature; optional `highlights` table | Scorebat (free) | ❌ frontend-centric | Med–High | 🟢 proposed |
 
 ## Recommended sequencing (data layer first)

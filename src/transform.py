@@ -357,6 +357,21 @@ def transform_team_stats(raw_teams: list[dict], fixture_id: int, captured_at: st
     return rows
 
 
+# --- ER-6: per-match news links --------------------------------------------
+def transform_news(articles: list[dict], fixture_id: int, captured_at: str, *, limit: int = 3) -> list[dict]:
+    """GNews articles -> news rows (ranked 1..limit)."""
+    rows = []
+    for seq, a in enumerate((articles or [])[:limit], start=1):
+        src = a.get("source") or {}
+        rows.append({
+            "fixture_id": fixture_id, "seq": seq,
+            "title": a.get("title"), "url": a.get("url"),
+            "source": src.get("name"), "published_at": a.get("publishedAt"),
+            "captured_at": captured_at,
+        })
+    return rows
+
+
 # --- ER-5: team World Cup history (static CSV) -----------------------------
 def load_team_history(csv_path, name_to_team_id: dict[str, int]) -> tuple[list[dict], list[str]]:
     """Load team_history.csv, resolving team name -> team_id. Returns (rows, unmatched names)."""
