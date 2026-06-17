@@ -20,8 +20,8 @@ Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
 - 🟡 **Standings "Group Stage" 13th block (D6).** Filtered out; monitor in case the API shape changes.
 
 ## Pipeline / ops
-- 🔴 **GitHub Actions Node 20 deprecation.** `actions/checkout@v4` + `setup-python@v5`
-  warn about the Node 20→24 migration. Bump action versions to silence.
+- ✅ **Node 20 deprecation fixed (2026-06-16).** Bumped `actions/checkout@v6` +
+  `actions/setup-python@v6` (both Node 24). No more deprecation warnings.
 - 🟢 ✅ **Cron verified.** The scheduled run fired 2026-06-16 12:54 UTC (GitHub delays
   schedules under load) and auto-committed a DB refresh. Both trigger paths now proven.
 - 🟢 **`jupyter`/`nbconvert` not in `requirements.txt`.** Add them if one-command notebook
