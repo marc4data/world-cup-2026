@@ -29,6 +29,12 @@ _FOREIGN_KEYS = [
     ("fixture_player_stat", "fixture_id", "fixture", "fixture_id"),
     ("fixture_player_stat", "player_id", "player", "player_id"),
     ("fixture_player_stat", "team_id", "team", "team_id"),
+    # Dashboard ERs
+    ("event", "fixture_id", "fixture", "fixture_id"),
+    ("event", "team_id", "team", "team_id"),
+    ("fixture_team_stat", "fixture_id", "fixture", "fixture_id"),
+    ("fixture_team_stat", "team_id", "team", "team_id"),
+    ("team_history", "team_id", "team", "team_id"),
 ]
 
 # (table, primary-key columns) for the duplicate-PK sweep.
@@ -43,6 +49,9 @@ _PRIMARY_KEYS = [
     ("player", ["player_id"]),
     ("player_season_stat", ["player_id", "team_id", "season", "league_id"]),
     ("fixture_player_stat", ["fixture_id", "player_id"]),
+    ("event", ["fixture_id", "seq"]),
+    ("fixture_team_stat", ["fixture_id", "team_id"]),
+    ("team_history", ["team_id"]),
 ]
 
 

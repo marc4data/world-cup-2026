@@ -1,17 +1,17 @@
-name,city,country,latitude,longitude
-MetLife Stadium,East Rutherford,USA,40.8128,-74.0764
-SoFi Stadium,Inglewood,USA,33.9535,-118.3392
-AT&T Stadium,Arlington,USA,32.7473,-97.0945
-Mercedes-Benz Stadium,Atlanta,USA,33.7553,-84.4006
-NRG Stadium,Houston,USA,29.6847,-95.4107
-Arrowhead Stadium,Kansas City,USA,39.0489,-94.4839
-Hard Rock Stadium,Miami Gardens,USA,25.9580,-80.2389
-Gillette Stadium,Foxborough,USA,42.0909,-71.2643
-Lincoln Financial Field,Philadelphia,USA,39.9008,-75.1675
-Levi's Stadium,Santa Clara,USA,37.4030,-121.9700
-Lumen Field,Seattle,USA,47.5952,-122.3316
-BMO Field,Toronto,Canada,43.6332,-79.4185
-BC Place,Vancouver,Canada,49.2768,-123.1119
-Estadio Azteca,Mexico City,Mexico,19.3029,-99.1505
-Estadio Akron,Guadalajara,Mexico,20.6819,-103.4626
-Estadio BBVA,Monterrey,Mexico,25.6692,-100.2447
+name,city,country,latitude,longitude,capacity
+MetLife Stadium,East Rutherford,USA,40.8128,-74.0764,80663
+SoFi Stadium,Inglewood,USA,33.9535,-118.3392,70492
+AT&T Stadium,Arlington,USA,32.7473,-97.0945,70649
+Mercedes-Benz Stadium,Atlanta,USA,33.7553,-84.4006,68239
+NRG Stadium,Houston,USA,29.6847,-95.4107,68777
+Arrowhead Stadium,Kansas City,USA,39.0489,-94.4839,69045
+Hard Rock Stadium,Miami Gardens,USA,25.9580,-80.2389,64478
+Gillette Stadium,Foxborough,USA,42.0909,-71.2643,64146
+Lincoln Financial Field,Philadelphia,USA,39.9008,-75.1675,69596
+Levi's Stadium,Santa Clara,USA,37.4030,-121.9700,68500
+Lumen Field,Seattle,USA,47.5952,-122.3316,68740
+BMO Field,Toronto,Canada,43.6332,-79.4185,43036
+BC Place,Vancouver,Canada,49.2768,-123.1119,52497
+Estadio Azteca,Mexico City,Mexico,19.3029,-99.1505,80824
+Estadio Akron,Guadalajara,Mexico,20.6819,-103.4626,45664
+Estadio BBVA,Monterrey,Mexico,25.6692,-100.2447,51243

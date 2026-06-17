@@ -56,27 +56,44 @@ def run_season(conn, api, captured, *, max_pages=None) -> tuple[int, int, int]:
     return players_seen, stats_seen, page
 
 
-def run_fixtures(conn, api, captured, *, max_fixtures) -> tuple[int, int]:
-    """Pull /fixtures/players for finished fixtures missing per-match rows."""
+def run_fixtures(conn, api, captured, *, max_fixtures) -> dict:
+    """Pull per-fixture detail for finished fixtures missing any of it.
+
+    Each fixture costs 3 calls: /fixtures/players (M7), /fixtures/events (ER-1),
+    /fixtures/statistics (ER-2). The gate re-pulls a fixture if it is missing any
+    of the three, so fixtures detailed before the ER tables existed get backfilled.
+    """
     todo = [r[0] for r in conn.execute(
-        "SELECT fixture_id FROM fixture WHERE is_finished = 1 "
-        "AND fixture_id NOT IN (SELECT DISTINCT fixture_id FROM fixture_player_stat) "
-        "ORDER BY kickoff_utc LIMIT ?", (max_fixtures,)
-    )]
-    fixtures_done, rows_added = 0, 0
+        """SELECT fixture_id FROM fixture WHERE is_finished = 1
+           AND ( fixture_id NOT IN (SELECT DISTINCT fixture_id FROM fixture_player_stat)
+              OR fixture_id NOT IN (SELECT DISTINCT fixture_id FROM event)
+              OR fixture_id NOT IN (SELECT DISTINCT fixture_id FROM fixture_team_stat) )
+           ORDER BY kickoff_utc LIMIT ?""", (max_fixtures,))]
+    c = {"fixtures": 0, "player_stats": 0, "events": 0, "team_stats": 0}
     for fid in todo:
         player_rows, stat_rows = transform.transform_fixture_players(
             api.get_fixture_players(fid), fid, captured)
         db.upsert(conn, "player", player_rows, ["player_id"])  # parents first
         db.upsert(conn, "fixture_player_stat", stat_rows, ["fixture_id", "player_id"])
-        fixtures_done += 1
-        rows_added += len(stat_rows)
-    return fixtures_done, rows_added
+
+        event_rows = transform.transform_events(api.get_fixture_events(fid), fid, captured)
+        db.upsert(conn, "event", event_rows, ["fixture_id", "seq"])
+
+        team_stat_rows = transform.transform_team_stats(
+            api.get_fixture_statistics(fid), fid, captured)
+        db.upsert(conn, "fixture_team_stat", team_stat_rows, ["fixture_id", "team_id"])
+
+        c["fixtures"] += 1
+        c["player_stats"] += len(stat_rows)
+        c["events"] += len(event_rows)
+        c["team_stats"] += len(team_stat_rows)
+    return c
 
 
 def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
         max_pages=None, db_path=DB_PATH) -> dict:
-    api = APIFootball(max_calls_per_run=max(60, (max_fixtures or 0) + 60))
+    # 3 calls per fixture (players + events + statistics).
+    api = APIFootball(max_calls_per_run=max(80, (max_fixtures or 0) * 3 + 60))
     conn = db.connect(db_path)
     db.init_db(conn)
     started = _now_utc_iso()
@@ -84,13 +101,16 @@ def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
     calls_before = api.calls_used
 
     summary = {"mode": mode, "players": 0, "season_stats": 0,
-               "fixtures_pulled": 0, "fixture_stats": 0}
+               "fixtures_pulled": 0, "fixture_stats": 0, "events": 0, "team_stats": 0}
     if mode in ("season", "both"):
         p, s, _ = run_season(conn, api, captured, max_pages=max_pages)
         summary["players"], summary["season_stats"] = p, s
     if mode in ("fixtures", "both"):
-        fx, rows = run_fixtures(conn, api, captured, max_fixtures=max_fixtures)
-        summary["fixtures_pulled"], summary["fixture_stats"] = fx, rows
+        fx = run_fixtures(conn, api, captured, max_fixtures=max_fixtures)
+        summary["fixtures_pulled"] = fx["fixtures"]
+        summary["fixture_stats"] = fx["player_stats"]
+        summary["events"] = fx["events"]
+        summary["team_stats"] = fx["team_stats"]
 
     calls_used = api.calls_used - calls_before
     db.insert_row(conn, "load_run", {
@@ -99,7 +119,8 @@ def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
         "api_calls_used": calls_used, "fixtures_upserted": summary["fixtures_pulled"],
         "status": "ok",
         "notes": (f"players={summary['players']} season_stats={summary['season_stats']} "
-                  f"fixture_stats={summary['fixture_stats']}"),
+                  f"fixture_stats={summary['fixture_stats']} events={summary['events']} "
+                  f"team_stats={summary['team_stats']}"),
     })
 
     report = integrity.run_all_checks(conn)
@@ -126,7 +147,8 @@ def main(argv=None) -> int:
     print(f"[players:{s['mode']}] calls={s['api_calls_used']} "
           f"(daily_remaining={s['daily_remaining']})")
     print(f"  players={s['players']} season_stats={s['season_stats']} "
-          f"fixtures_pulled={s['fixtures_pulled']} fixture_stats={s['fixture_stats']}")
+          f"fixtures_pulled={s['fixtures_pulled']} fixture_stats={s['fixture_stats']} "
+          f"events={s['events']} team_stats={s['team_stats']}")
     print("  integrity: OK (0 errors)")
     return 0
 

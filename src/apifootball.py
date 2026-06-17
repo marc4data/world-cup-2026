@@ -144,6 +144,14 @@ class APIFootball:
         """Per-player stats for one fixture (2 team blocks)."""
         return self._get("/fixtures/players", {"fixture": fixture_id})
 
+    def get_fixture_events(self, fixture_id: int) -> list:
+        """Match events for one fixture (goals, cards, subs, VAR) — ER-1."""
+        return self._get("/fixtures/events", {"fixture": fixture_id})
+
+    def get_fixture_statistics(self, fixture_id: int) -> list:
+        """Team match-stat blocks for one fixture (2 teams) — ER-2."""
+        return self._get("/fixtures/statistics", {"fixture": fixture_id})
+
 
 def _to_int(value, fallback):
     try:

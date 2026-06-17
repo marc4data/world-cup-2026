@@ -24,7 +24,7 @@ import integrity
 import openmeteo
 import transform
 from apifootball import APIFootball
-from config import CUTOFF_TZ, DB_PATH, MAX_NEW_PREDICTIONS_PER_RUN
+from config import CUTOFF_TZ, DB_PATH, MAX_NEW_PREDICTIONS_PER_RUN, TEAM_HISTORY_CSV
 
 
 def _now_utc_iso() -> str:
@@ -50,6 +50,12 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
     team_rows = transform.transform_teams(api.get_teams())
     db.upsert(conn, "venue", venue_rows, ["venue_id"])
     db.upsert(conn, "team", team_rows, ["team_id"])
+
+    # Static team World Cup history (ER-5) — child of team, tiny, idempotent.
+    name_to_team_id = {t["name"]: t["team_id"] for t in team_rows}
+    history_rows, _hist_unmatched = transform.load_team_history(
+        TEAM_HISTORY_CSV, name_to_team_id)
+    db.upsert(conn, "team_history", history_rows, ["team_id"])
 
     # 2) Standings -> rows + team->group map for fixture labelling.
     standing_rows, team_to_group = transform.transform_standings(api.get_standings())

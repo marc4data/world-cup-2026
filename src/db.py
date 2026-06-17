@@ -148,6 +148,57 @@ CREATE TABLE IF NOT EXISTS fixture_player_stat (
   FOREIGN KEY (team_id)    REFERENCES team(team_id)
 );
 
+-- Dashboard ERs: match events (ER-1), team match stats (ER-2), team history (ER-5)
+CREATE TABLE IF NOT EXISTS event (
+  fixture_id  INTEGER NOT NULL,
+  seq         INTEGER NOT NULL,   -- order within the fixture (API gives no event id)
+  minute      INTEGER,
+  extra       INTEGER,
+  team_id     INTEGER,
+  player_id   INTEGER,            -- denormalised (no FK: events may name non-squad players)
+  player_name TEXT,
+  assist_id   INTEGER,
+  assist_name TEXT,
+  type        TEXT,               -- Goal | Card | subst | Var
+  detail      TEXT,
+  captured_at TEXT,
+  PRIMARY KEY (fixture_id, seq),
+  FOREIGN KEY (fixture_id) REFERENCES fixture(fixture_id),
+  FOREIGN KEY (team_id)    REFERENCES team(team_id)
+);
+
+CREATE TABLE IF NOT EXISTS fixture_team_stat (
+  fixture_id  INTEGER NOT NULL,
+  team_id     INTEGER NOT NULL,
+  shots_total INTEGER,
+  shots_on    INTEGER,
+  shots_off   INTEGER,
+  possession  INTEGER,            -- '61%' -> 61
+  passes      INTEGER,
+  passes_pct  INTEGER,
+  fouls       INTEGER,
+  corners     INTEGER,
+  offsides    INTEGER,
+  yellow      INTEGER,
+  red         INTEGER,
+  saves       INTEGER,
+  xg          REAL,               -- expected_goals
+  captured_at TEXT,
+  PRIMARY KEY (fixture_id, team_id),
+  FOREIGN KEY (fixture_id) REFERENCES fixture(fixture_id),
+  FOREIGN KEY (team_id)    REFERENCES team(team_id)
+);
+
+CREATE TABLE IF NOT EXISTS team_history (
+  team_id         INTEGER PRIMARY KEY,
+  titles          INTEGER,
+  appearances     INTEGER,
+  best_finish     TEXT,
+  last_appearance INTEGER,
+  source          TEXT,
+  FOREIGN KEY (team_id) REFERENCES team(team_id)
+);
+
 CREATE TABLE IF NOT EXISTS load_run (
   run_id      INTEGER PRIMARY KEY AUTOINCREMENT,
   run_type    TEXT,

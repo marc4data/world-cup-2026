@@ -40,7 +40,7 @@ def load_venue_rows(csv_path=VENUES_GEO_CSV) -> tuple[list[dict], dict[str, int]
                 "name": r["name"],
                 "city": r["city"],
                 "country": r["country"],
-                "capacity": None,
+                "capacity": _to_int(r.get("capacity")),  # ER-3
                 "surface": None,
                 "latitude": float(r["latitude"]),
                 "longitude": float(r["longitude"]),
@@ -207,6 +207,17 @@ def _to_float(value) -> float | None:
         return None
 
 
+def _to_int(value) -> int | None:
+    """Coerce to int, tolerating '61%' and blanks."""
+    if value is None:
+        return None
+    s = str(value).strip().rstrip("%").strip()
+    try:
+        return int(float(s)) if s else None
+    except (TypeError, ValueError):
+        return None
+
+
 # --- Phase 2 (M7): players -------------------------------------------------
 def transform_players(raw_players: list[dict], captured_at: str) -> tuple[list[dict], list[dict]]:
     """A /players page -> (player rows, player_season_stat rows).
@@ -275,3 +286,77 @@ def transform_fixture_players(raw_teams: list[dict], fixture_id: int, captured_a
                 "captured_at": captured_at,
             })
     return players, rows
+
+
+# --- ER-1: match events ----------------------------------------------------
+def transform_events(raw_events: list[dict], fixture_id: int, captured_at: str) -> list[dict]:
+    """A /fixtures/events response -> ordered event rows (seq = response order)."""
+    rows = []
+    for seq, e in enumerate(raw_events):
+        time = e.get("time") or {}
+        team = e.get("team") or {}
+        player = e.get("player") or {}
+        assist = e.get("assist") or {}
+        rows.append({
+            "fixture_id": fixture_id, "seq": seq,
+            "minute": time.get("elapsed"), "extra": time.get("extra"),
+            "team_id": team.get("id"),
+            "player_id": player.get("id"), "player_name": player.get("name"),
+            "assist_id": assist.get("id"), "assist_name": assist.get("name"),
+            "type": e.get("type"), "detail": e.get("detail"),
+            "captured_at": captured_at,
+        })
+    return rows
+
+
+# --- ER-2: team match stats ------------------------------------------------
+# Map API statistic 'type' strings to our columns.
+_STAT_MAP = {
+    "Total Shots": "shots_total", "Shots on Goal": "shots_on", "Shots off Goal": "shots_off",
+    "Ball Possession": "possession", "Total passes": "passes", "Passes %": "passes_pct",
+    "Fouls": "fouls", "Corner Kicks": "corners", "Offsides": "offsides",
+    "Yellow Cards": "yellow", "Red Cards": "red", "Goalkeeper Saves": "saves",
+}
+
+
+def transform_team_stats(raw_teams: list[dict], fixture_id: int, captured_at: str) -> list[dict]:
+    """A /fixtures/statistics response -> one row per team (mapped stat columns)."""
+    rows = []
+    for block in raw_teams:
+        team = block.get("team") or {}
+        if team.get("id") is None:
+            continue
+        row = {"fixture_id": fixture_id, "team_id": team["id"], "captured_at": captured_at,
+               "xg": None}
+        for col in _STAT_MAP.values():
+            row[col] = None
+        for s in block.get("statistics") or []:
+            col = _STAT_MAP.get(s.get("type"))
+            if col:
+                row[col] = _to_int(s.get("value"))
+            elif s.get("type") == "expected_goals":
+                row["xg"] = _to_float(s.get("value"))
+        rows.append(row)
+    return rows
+
+
+# --- ER-5: team World Cup history (static CSV) -----------------------------
+def load_team_history(csv_path, name_to_team_id: dict[str, int]) -> tuple[list[dict], list[str]]:
+    """Load team_history.csv, resolving team name -> team_id. Returns (rows, unmatched names)."""
+    import csv as _csv
+    rows, unmatched = [], []
+    with open(csv_path, newline="") as fh:
+        for r in _csv.DictReader(fh):
+            tid = name_to_team_id.get(r["team"])
+            if tid is None:
+                unmatched.append(r["team"])
+                continue
+            rows.append({
+                "team_id": tid,
+                "titles": _to_int(r.get("titles")),
+                "appearances": _to_int(r.get("appearances")),
+                "best_finish": (r.get("best_finish") or None) or None,
+                "last_appearance": _to_int(r.get("last_appearance")),
+                "source": r.get("source") or None,
+            })
+    return rows, unmatched
