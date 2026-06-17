@@ -1,0 +1,53 @@
+# Roadmap — Enhancement Requests (ER) backlog
+
+Formal backlog for the data-depth Enhancement Requests from
+`DASHBOARD_REQUIREMENTS.md` §14, mapped onto **this** repo's pipeline. This is the
+source of truth for ER status; day-to-day uncertainties stay in `OPEN_ITEMS.md`.
+
+## How this repo relates to the dashboard vision
+
+The dashboard doc describes a **web frontend** (GitHub Pages, vanilla JS, `/data/*.json`).
+This repo is the **data layer** that frontend needs — API-Football → SQLite with
+integrity, idempotent loads, and report/export surfaces. Most ERs are *ingestion*
+work and slot straight into our existing pattern (table → transform → integrity →
+ingest CLI → tests → report/export). The web app is a **separate downstream track**
+(its own repo per dashboard §10-A); when it exists, we add a JSON export step
+mirroring `export_excel.py`.
+
+Two relevant decisions from the dashboard doc are **already settled here:** the paid
+API-Football plan (we're on Pro) and the repo (this one, `world-cup-2026`).
+
+## ER status
+
+Status: 🟢 proposed · 🟡 in progress · ✅ done. "Fits now?" = implementable in this
+pipeline today without the web frontend.
+
+| ID | Enhancement | Maps to (this repo) | Source | Fits now? | Lift | Status |
+|----|-------------|---------------------|--------|-----------|------|--------|
+| **ER-1** | Match event timeline (goals/assists, cards, subs, VAR) | new `event` table + `/fixtures/events` ingest | API-Football (Pro) | ✅ yes | Low–Med | 🟢 proposed |
+| **ER-2** | Team + player match stats | **player half DONE** (`fixture_player_stat`); add `fixture_team_stat` ← `/fixtures/statistics` | API-Football (Pro) | ✅ yes | Med | 🟡 half done |
+| **ER-3** | Authoritative venue capacities | extend `venue.capacity` (+`venues_geo.csv`) | FIFA figures + Wikidata | ✅ yes | Low | 🟢 proposed |
+| **ER-4** | Venue enrichment (image, year, history) | extend `venue` (+ maybe `venue_meta`) | Wikidata QID + Commons | ✅ yes (static) | Med | 🟢 proposed |
+| **ER-5** | Team World Cup history (titles, appearances) | new `team_history` table (static load) | jfjelstul/worldcup or Kaggle | ✅ yes (static) | Low–Med | 🟢 proposed |
+| **ER-6** | Per-match news links | new `news` table | GNews/NewsAPI (needs key) | ⚠️ needs a news API key | Low | 🟢 proposed |
+| **ER-7** | Goal highlight clips (embed) | frontend feature; optional `highlights` table | Scorebat (free) | ❌ frontend-centric | Med–High | 🟢 proposed |
+
+## Recommended sequencing (data layer first)
+
+1. **ER-3 — venue capacities** (quick win; `venue.capacity` already exists, just NULL).
+2. **ER-1 — match events** (high storytelling value; same `/fixtures/...` pattern as M7).
+3. **ER-2 completion — team match stats** (`fixture_team_stat`; player half already shipped).
+4. **ER-5 — team WC history** (static dataset; no live cadence).
+5. **ER-4 — venue enrichment** (Wikidata; static, attribution matters).
+6. **ER-6 — news links** (needs a news API key + ToS check).
+7. **ER-7 — highlights** (belongs with the web frontend; embeds-only, rights-safe).
+
+Each is independently shippable as a milestone (table + transform + integrity + ingest
++ tests + a report/export surface), reviewed like M1–M7. Static-load ERs (3/4/5) run
+once, not on the daily cron; live ERs (1/2/6) ride the match-day cadence.
+
+## Out of scope here (separate track)
+
+The interactive web dashboard itself (§§4, 8, 9 of the dashboard doc) — frontend,
+Pages deploy, JSON contract, win-probability model. Revisit once the data-layer ERs
+land; this repo would feed it via a `/data/*.json` export.

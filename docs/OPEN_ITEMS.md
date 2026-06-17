@@ -28,6 +28,8 @@ Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
   reproducibility is wanted (they're not pipeline deps, so CI install stays lean).
 
 ## Scope / roadmap
+- 📋 **Dashboard Enhancement Requests (ER-1…ER-7)** are tracked in **[ROADMAP.md](ROADMAP.md)**
+  — mapped onto this pipeline, with status, lift, and recommended sequencing.
 - 🟢 **Knockout coverage.** Only the 72 group-stage fixtures exist so far; knockout rounds
   are created as teams qualify. The report handles the group stage; knockout reporting is future.
 - ✅ **M7 — Phase 2 scaffold done (2026-06-16).** player / player_season_stat /
