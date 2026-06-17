@@ -58,7 +58,8 @@ class APIFootball:
         self.session.mount("https://", HTTPAdapter(max_retries=retry))
 
     # -- core ---------------------------------------------------------------
-    def _get(self, endpoint: str, params: dict | None = None) -> list:
+    def _request(self, endpoint: str, params: dict | None = None) -> dict:
+        """Make one call and return the full envelope (raises on errors)."""
         if self.max_calls_per_run is not None and self.calls_used >= self.max_calls_per_run:
             raise RateLimitError(
                 f"per-run call ceiling reached ({self.max_calls_per_run}); "
@@ -84,7 +85,11 @@ class APIFootball:
             if "limit" in text or "request" in text or "rate" in text:
                 raise RateLimitError(f"{endpoint} rate-limited: {errors}")
             raise APIFootballError(f"{endpoint} returned errors: {errors}")
-        return payload.get("response", [])
+        return payload
+
+    def _get(self, endpoint: str, params: dict | None = None) -> list:
+        """Convenience: return just the ``response`` array."""
+        return self._request(endpoint, params).get("response", [])
 
     def _read_rate_headers(self, resp: requests.Response) -> None:
         h = resp.headers
@@ -126,6 +131,18 @@ class APIFootball:
     def get_prediction(self, fixture_id: int) -> list:
         """Pre-match forecast for one fixture (immutable once cached)."""
         return self._get("/predictions", {"fixture": fixture_id})
+
+    # -- Phase 2 (M7) -------------------------------------------------------
+    def get_players_page(self, page: int = 1) -> tuple[list, dict]:
+        """One page of season player stats. Returns (response, paging dict)."""
+        payload = self._request(
+            "/players", {"league": LEAGUE_ID, "season": SEASON, "page": page}
+        )
+        return payload.get("response", []), payload.get("paging", {})
+
+    def get_fixture_players(self, fixture_id: int) -> list:
+        """Per-player stats for one fixture (2 team blocks)."""
+        return self._get("/fixtures/players", {"fixture": fixture_id})
 
 
 def _to_int(value, fallback):

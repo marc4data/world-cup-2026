@@ -198,3 +198,80 @@ def _pct(value) -> int | None:
         return None
     s = str(value).strip().rstrip("%").strip()
     return int(s) if s else None
+
+
+def _to_float(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+# --- Phase 2 (M7): players -------------------------------------------------
+def transform_players(raw_players: list[dict], captured_at: str) -> tuple[list[dict], list[dict]]:
+    """A /players page -> (player rows, player_season_stat rows).
+
+    The API key is `appearences` (sic). statistics is already filtered to the
+    queried league/season, so each entry becomes one season-stat row.
+    """
+    players, stats = [], []
+    for item in raw_players:
+        p = item.get("player") or {}
+        if p.get("id") is None:
+            continue
+        players.append({
+            "player_id": p["id"], "name": p.get("name"),
+            "firstname": p.get("firstname"), "lastname": p.get("lastname"),
+            "nationality": p.get("nationality"), "age": p.get("age"),
+            "height": p.get("height"), "weight": p.get("weight"), "photo": p.get("photo"),
+        })
+        for st in item.get("statistics") or []:
+            team = st.get("team") or {}
+            league = st.get("league") or {}
+            games = st.get("games") or {}
+            goals = st.get("goals") or {}
+            if team.get("id") is None:
+                continue
+            stats.append({
+                "player_id": p["id"], "team_id": team["id"],
+                "season": league.get("season") or SEASON,
+                "league_id": league.get("id") or LEAGUE_ID,
+                "position": games.get("position"),
+                "appearances": games.get("appearences"),
+                "minutes": games.get("minutes"),
+                "goals": goals.get("total"), "assists": goals.get("assists"),
+                "rating": _to_float(games.get("rating")),
+                "captured_at": captured_at,
+            })
+    return players, stats
+
+
+def transform_fixture_players(raw_teams: list[dict], fixture_id: int, captured_at: str) -> tuple[list[dict], list[dict]]:
+    """A /fixtures/players response -> (minimal player rows, fixture_player_stat rows).
+
+    Minimal player rows (id + name) are returned so the FK parent exists even if
+    a player wasn't in the season pull; the season pull later enriches them.
+    """
+    players, rows = [], []
+    for block in raw_teams:
+        team = block.get("team") or {}
+        tid = team.get("id")
+        for pl in block.get("players") or []:
+            p = pl.get("player") or {}
+            if p.get("id") is None or tid is None:
+                continue
+            stats = pl.get("statistics") or []
+            st = stats[0] if stats else {}
+            games = st.get("games") or {}
+            goals = st.get("goals") or {}
+            players.append({"player_id": p["id"], "name": p.get("name")})
+            rows.append({
+                "fixture_id": fixture_id, "player_id": p["id"], "team_id": tid,
+                "minutes": games.get("minutes"), "position": games.get("position"),
+                "rating": _to_float(games.get("rating")),
+                "is_starter": 0 if games.get("substitute") else 1,
+                "captain": 1 if games.get("captain") else 0,
+                "goals": goals.get("total"), "assists": goals.get("assists"),
+                "captured_at": captured_at,
+            })
+    return players, rows

@@ -31,6 +31,10 @@ erDiagram
     TEAM     ||--o{ STANDING   : "ranked in"
     FIXTURE  ||--o| PREDICTION : "pre-match forecast"
     FIXTURE  ||--o| WEATHER    : "kickoff conditions"
+    PLAYER   ||--o{ PLAYER_SEASON_STAT  : "season stats"
+    TEAM     ||--o{ PLAYER_SEASON_STAT  : "squad"
+    PLAYER   ||--o{ FIXTURE_PLAYER_STAT : "per-match"
+    FIXTURE  ||--o{ FIXTURE_PLAYER_STAT : "lineups"
 
     TEAM {
         int  team_id PK
@@ -95,6 +99,33 @@ erDiagram
         int  code "WMO"
         text summary
     }
+    PLAYER {
+        int  player_id PK
+        text name
+        text nationality
+        int  age
+    }
+    PLAYER_SEASON_STAT {
+        int  player_id PK,FK
+        int  team_id PK,FK
+        int  season PK
+        int  league_id PK
+        int  appearances
+        int  minutes
+        int  goals
+        int  assists
+        real rating
+    }
+    FIXTURE_PLAYER_STAT {
+        int  fixture_id PK,FK
+        int  player_id PK,FK
+        int  team_id FK
+        int  minutes
+        int  is_starter
+        int  goals
+        int  assists
+        real rating
+    }
 ```
 
 | Table | Grain | Key columns | Notes |
@@ -105,6 +136,9 @@ erDiagram
 | `standing` | a team's row in a group table | `(season, league_id, group_label, team_id)` | overwritten each run |
 | `prediction` | pre-match forecast | `fixture_id` | **immutable** once stored |
 | `weather` | kickoff conditions | `fixture_id` | archive for past, forecast for upcoming |
+| `player` | one player | `player_id` | Phase 2 (M7) |
+| `player_season_stat` | a player's tournament stats | `(player_id, team_id, season, league_id)` | minutes, goals, assists, rating |
+| `fixture_player_stat` | a player's match line | `(fixture_id, player_id)` | per-match minutes, starter, goals |
 | `load_run` | one ingest run | `run_id` | audit / watermark (calls used, counts, status) |
 
 ## Repository layout
@@ -119,6 +153,8 @@ src/
   ingest.py                          # backfill + incremental CLI (M3)
   transform.py                       # group assignment, validation (M3)
   integrity.py                       # dup/orphan/reconciliation checks (M1)
+  players_ingest.py                  # Phase 2 player stats CLI (M7)
+  export_excel.py                    # one-sheet-per-table Excel export
 data/
   worldcup.db                        # committed SQLite artifact
   venues_geo.csv                     # 16 venue lat/long lookup (M1)

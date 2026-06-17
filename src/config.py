@@ -25,6 +25,10 @@ FINISHED_STATUSES = frozenset({"FT", "AET", "PEN"})
 # --- Rate-limit caps (Free plan ~100 req/day; spec §7) ---------------------
 MAX_NEW_PREDICTIONS_PER_RUN = 10
 
+# Phase 2 (M7) player pulls — spread across days even on the Pro plan.
+# /fixtures/players is one call per finished fixture; cap per run.
+MAX_FIXTURE_PLAYER_PULLS_PER_RUN = 20
+
 # --- API-Football v3 -------------------------------------------------------
 API_BASE_URL = "https://v3.football.api-sports.io"
 API_KEY_HEADER = "x-apisports-key"

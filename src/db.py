@@ -100,6 +100,54 @@ CREATE TABLE IF NOT EXISTS weather (
   FOREIGN KEY (fixture_id) REFERENCES fixture(fixture_id)
 );
 
+-- Phase 2 (M7): player season + per-match stats -----------------------------
+CREATE TABLE IF NOT EXISTS player (
+  player_id   INTEGER PRIMARY KEY,
+  name        TEXT,
+  firstname   TEXT,
+  lastname    TEXT,
+  nationality TEXT,
+  age         INTEGER,
+  height      TEXT,
+  weight      TEXT,
+  photo       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS player_season_stat (
+  player_id   INTEGER NOT NULL,
+  team_id     INTEGER NOT NULL,
+  season      INTEGER NOT NULL,
+  league_id   INTEGER NOT NULL,
+  position    TEXT,
+  appearances INTEGER,
+  minutes     INTEGER,
+  goals       INTEGER,
+  assists     INTEGER,
+  rating      REAL,
+  captured_at TEXT,
+  PRIMARY KEY (player_id, team_id, season, league_id),
+  FOREIGN KEY (player_id) REFERENCES player(player_id),
+  FOREIGN KEY (team_id)   REFERENCES team(team_id)
+);
+
+CREATE TABLE IF NOT EXISTS fixture_player_stat (
+  fixture_id  INTEGER NOT NULL,
+  player_id   INTEGER NOT NULL,
+  team_id     INTEGER NOT NULL,
+  minutes     INTEGER,
+  position    TEXT,
+  rating      REAL,
+  is_starter  INTEGER,
+  captain     INTEGER,
+  goals       INTEGER,
+  assists     INTEGER,
+  captured_at TEXT,
+  PRIMARY KEY (fixture_id, player_id),
+  FOREIGN KEY (fixture_id) REFERENCES fixture(fixture_id),
+  FOREIGN KEY (player_id)  REFERENCES player(player_id),
+  FOREIGN KEY (team_id)    REFERENCES team(team_id)
+);
+
 CREATE TABLE IF NOT EXISTS load_run (
   run_id      INTEGER PRIMARY KEY AUTOINCREMENT,
   run_type    TEXT,

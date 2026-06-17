@@ -23,6 +23,12 @@ _FOREIGN_KEYS = [
     ("standing", "team_id", "team", "team_id"),
     ("prediction", "fixture_id", "fixture", "fixture_id"),
     ("weather", "fixture_id", "fixture", "fixture_id"),
+    # Phase 2 (M7)
+    ("player_season_stat", "player_id", "player", "player_id"),
+    ("player_season_stat", "team_id", "team", "team_id"),
+    ("fixture_player_stat", "fixture_id", "fixture", "fixture_id"),
+    ("fixture_player_stat", "player_id", "player", "player_id"),
+    ("fixture_player_stat", "team_id", "team", "team_id"),
 ]
 
 # (table, primary-key columns) for the duplicate-PK sweep.
@@ -33,6 +39,10 @@ _PRIMARY_KEYS = [
     ("standing", ["season", "league_id", "group_label", "team_id"]),
     ("prediction", ["fixture_id"]),
     ("weather", ["fixture_id"]),
+    # Phase 2 (M7)
+    ("player", ["player_id"]),
+    ("player_season_stat", ["player_id", "team_id", "season", "league_id"]),
+    ("fixture_player_stat", ["fixture_id", "player_id"]),
 ]
 
 

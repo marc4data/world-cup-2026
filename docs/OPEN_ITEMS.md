@@ -30,7 +30,12 @@ Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
 ## Scope / roadmap
 - 🟢 **Knockout coverage.** Only the 72 group-stage fixtures exist so far; knockout rounds
   are created as teams qualify. The report handles the group stage; knockout reporting is future.
-- 🟢 **M7 — Phase 2 scaffold** (`/players`, `/fixtures/players`) still pending, rate-limit-aware.
+- ✅ **M7 — Phase 2 scaffold done (2026-06-16).** player / player_season_stat /
+  fixture_player_stat tables + integrity; `players_ingest.py` CLI (season + fixtures,
+  rate-limit-aware, separate cadence). Seeded live: 825 players, 16/16 finished fixtures.
+- 🟢 **Phase 2 follow-ups:** a weekly GitHub Action to run `players_ingest` (kept off the
+  daily job to protect cadence); a player/top-scorers report; `player_season_stat.captured_at`
+  refreshes every run (data values stable — could gate on change like weather for cleaner diffs).
 
 ## Report polish
 - ✅ **Redesigned (2026-06-16):** single landscape page, tabular schedule, weather as
