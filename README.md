@@ -134,6 +134,19 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+The repo ships `.vscode/settings.json` that auto-selects this `.venv`, puts `src/`
+on the import path (so `import db`, `import config`, … resolve), and enables pytest
+discovery. `requirements.txt` is the single source of truth — re-run
+`pip install -r requirements.txt` in the `.venv` to stay in sync.
+
+Run the suite and tools from the venv:
+
+```bash
+.venv/bin/python -m pytest tests/      # 27 tests
+.venv/bin/python src/ingest.py --mode incremental
+.venv/bin/python src/export_excel.py   # -> reports/worldcup_tables.xlsx
+```
+
 ### API key (read from the environment only)
 
 The API-Football key is **never stored in this repo**. It lives in a central
