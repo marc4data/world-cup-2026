@@ -14,11 +14,14 @@ import csv
 import re
 from datetime import date, datetime, timezone
 
+from pathlib import Path
+
 from config import (
     CUTOFF_TZ,
     FINISHED_STATUSES,
     LEAGUE_ID,
     SEASON,
+    VENUES_ENRICH_CSV,
     VENUES_GEO_CSV,
 )
 
@@ -32,9 +35,11 @@ def load_venue_rows(csv_path=VENUES_GEO_CSV) -> tuple[list[dict], dict[str, int]
     venue_id is assigned from CSV order (1..N) because the API rarely supplies
     one. Fixtures are later matched to these by venue name.
     """
+    enrich = _load_venue_enrichment()  # ER-4 (optional static file)
     rows, name_to_id = [], {}
     with open(csv_path, newline="") as fh:
         for i, r in enumerate(csv.DictReader(fh), start=1):
+            e = enrich.get(r["name"], {})
             rows.append({
                 "venue_id": i,
                 "name": r["name"],
@@ -44,9 +49,21 @@ def load_venue_rows(csv_path=VENUES_GEO_CSV) -> tuple[list[dict], dict[str, int]
                 "surface": None,
                 "latitude": float(r["latitude"]),
                 "longitude": float(r["longitude"]),
+                "wikidata_qid": e.get("wikidata_qid") or None,   # ER-4
+                "image_url": e.get("image_url") or None,
+                "opening_year": _to_int(e.get("opening_year")),
+                "description": e.get("description") or None,
             })
             name_to_id[r["name"]] = i
     return rows, name_to_id
+
+
+def _load_venue_enrichment(path=VENUES_ENRICH_CSV) -> dict[str, dict]:
+    """name -> enrichment row, from the static venues_enrich.csv (ER-4). Empty if absent."""
+    if not Path(path).exists():
+        return {}
+    with open(path, newline="") as fh:
+        return {r["name"]: r for r in csv.DictReader(fh)}
 
 
 # --- teams -----------------------------------------------------------------

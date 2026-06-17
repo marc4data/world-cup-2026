@@ -25,14 +25,18 @@ CREATE TABLE IF NOT EXISTS team (
 );
 
 CREATE TABLE IF NOT EXISTS venue (
-  venue_id  INTEGER PRIMARY KEY,
-  name      TEXT,
-  city      TEXT,
-  country   TEXT,
-  capacity  INTEGER,
-  surface   TEXT,
-  latitude  REAL,
-  longitude REAL
+  venue_id     INTEGER PRIMARY KEY,
+  name         TEXT,
+  city         TEXT,
+  country      TEXT,
+  capacity     INTEGER,
+  surface      TEXT,
+  latitude     REAL,
+  longitude    REAL,
+  wikidata_qid TEXT,      -- ER-4 enrichment
+  image_url    TEXT,
+  opening_year INTEGER,
+  description  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS fixture (
@@ -228,9 +232,26 @@ def connect(db_path: Path | str = DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+# Columns added to existing tables after their first release — applied to DBs
+# that predate the column (CREATE TABLE IF NOT EXISTS won't alter them).
+_COLUMN_MIGRATIONS = {
+    "venue": [
+        ("wikidata_qid", "TEXT"),
+        ("image_url", "TEXT"),
+        ("opening_year", "INTEGER"),
+        ("description", "TEXT"),
+    ],
+}
+
+
 def init_db(conn: sqlite3.Connection) -> None:
-    """Create all tables if they don't yet exist (idempotent)."""
+    """Create all tables if missing, then apply additive column migrations."""
     conn.executescript(SCHEMA_SQL)
+    for table, cols in _COLUMN_MIGRATIONS.items():
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, col_type in cols:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {col_type}")
     conn.commit()
 
 

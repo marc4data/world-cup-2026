@@ -27,7 +27,7 @@ pipeline today without the web frontend.
 | **ER-1** | Match event timeline (goals/assists, cards, subs, VAR) | `event` table + `/fixtures/events` ingest | API-Football (Pro) | ✅ yes | Low–Med | ✅ **done** |
 | **ER-2** | Team + player match stats | `fixture_player_stat` (M7) + `fixture_team_stat` ← `/fixtures/statistics` (incl. xG) | API-Football (Pro) | ✅ yes | Med | ✅ **done** |
 | **ER-3** | Authoritative venue capacities | `venue.capacity` ← `venues_geo.csv` | FIFA figures + Wikidata | ✅ yes | Low | ✅ **done** |
-| **ER-4** | Venue enrichment (image, year, history) | extend `venue` (+ maybe `venue_meta`) | Wikidata QID + Commons | ✅ yes (static) | Med | 🟢 proposed |
+| **ER-4** | Venue enrichment (image, year, history) | `venue` columns ← `venues_enrich.csv` (fetched by `venue_enrich.py`) | Wikidata QID + Commons + Wikipedia | ✅ yes (static) | Med | ✅ **done** |
 | **ER-5** | Team World Cup history (titles, appearances) | `team_history` table ← `team_history.csv` (static) | curated seed; verify vs jfjelstul | ✅ yes | Low–Med | ✅ **done** (curated seed) |
 | **ER-6** | Per-match news links | new `news` table | GNews/NewsAPI (needs key) | ⚠️ needs a news API key | Low | 🟢 proposed |
 | **ER-7** | Goal highlight clips (embed) | frontend feature; optional `highlights` table | Scorebat (free) | ❌ frontend-centric | Med–High | 🟢 proposed |

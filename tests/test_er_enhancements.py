@@ -19,6 +19,26 @@ def test_venue_capacity_loaded():
     assert all(r["capacity"] is None or r["capacity"] > 0 for r in rows)
 
 
+# --- ER-4 ------------------------------------------------------------------
+def test_venue_enrichment_merged():
+    rows, _ = transform.load_venue_rows()
+    azteca = {r["name"]: r for r in rows}["Estadio Azteca"]
+    assert azteca["wikidata_qid"] == "Q320454"
+    assert azteca["opening_year"] == 1966
+    assert azteca["image_url"] and azteca["description"]
+
+
+def test_venue_column_migration_adds_enrichment_columns():
+    # An old DB whose venue table predates the ER-4 columns gets them via init_db.
+    c = db.connect(":memory:")
+    c.execute("DROP TABLE IF EXISTS venue")
+    c.execute("CREATE TABLE venue (venue_id INTEGER PRIMARY KEY, name TEXT, capacity INTEGER)")
+    db.init_db(c)
+    cols = {r[1] for r in c.execute("PRAGMA table_info(venue)")}
+    assert {"wikidata_qid", "image_url", "opening_year", "description"} <= cols
+    c.close()
+
+
 # --- ER-1 ------------------------------------------------------------------
 _EVENTS = [
     {"time": {"elapsed": 9, "extra": None}, "team": {"id": 16, "name": "Mexico"},

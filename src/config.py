@@ -37,6 +37,7 @@ API_KEY_HEADER = "x-apisports-key"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = REPO_ROOT / "data" / "worldcup.db"
 VENUES_GEO_CSV = REPO_ROOT / "data" / "venues_geo.csv"
+VENUES_ENRICH_CSV = REPO_ROOT / "data" / "venues_enrich.csv"   # ER-4 (static, fetched)
 TEAM_HISTORY_CSV = REPO_ROOT / "data" / "team_history.csv"
 
 # Central credentials file, OUTSIDE the repo tree (no secret ever lives in-repo).
