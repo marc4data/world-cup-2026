@@ -4,6 +4,12 @@ Running backlog of things to address — not blockers, tracked so they don't sli
 Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
 
 ## Data quality / availability
+- 🟡 **`standing.rank` tiebreaker is the API's, not FIFA's.** API-Football ranks by
+  Points → GD → GF then stops; it does not implement the official FIFA check-down
+  (head-to-head, fair play, lots), and deep-tie ordering is arbitrary. Reconciliation
+  checks points only, not rank. Matters at end of group stage. Full write-up:
+  [standings_rank_tiebreaker.md](standings_rank_tiebreaker.md). Fix: compute `rank_fifa`
+  from fixtures + integrity check; also store the API `description` (qualification) field.
 - 🟡 **Prediction coverage is uneven (D7).** ~31/56 upcoming fixtures return a real
   forecast; the rest say "No predictions available" (e.g. all of Group I). Placeholders
   are intentionally not cached so they fill in on later runs. Re-probing is capped at
