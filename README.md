@@ -204,6 +204,29 @@ APISPORTS_KEY=your_key_here
 
 In CI, add `APISPORTS_KEY` as a GitHub Actions repository secret.
 
+## Keeping the dashboard data fresh
+
+The daily GitHub Actions cron rebuilds and commits `data/worldcup.db` +
+`reports/worldcup_tables.xlsx` to GitHub — but it pushes to GitHub, **not to your
+laptop**. A Tableau (or other) dashboard reading the **local** Excel will look stale
+until the local clone is pulled. Two ways to stay current:
+
+1. **Scheduled local auto-pull (recommended for local-file tools like Tableau).**
+   A launchd agent runs `git pull --ff-only` each morning so the local Excel updates
+   itself. Files: `scripts/auto_pull.sh` + `scripts/com.marc4data.worldcup.autopull.plist`.
+   Install:
+   ```bash
+   cp scripts/com.marc4data.worldcup.autopull.plist ~/Library/LaunchAgents/
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.marc4data.worldcup.autopull.plist
+   launchctl kickstart -k gui/$(id -u)/com.marc4data.worldcup.autopull   # test now
+   ```
+   Log: `~/Library/Logs/worldcup_autopull.log`. `--ff-only` never merges or clobbers
+   local edits. After the file updates, refresh the Tableau extract/connection to re-read it.
+
+2. **Read the Excel straight from GitHub (Power BI / Excel Power Query).**
+   Data source URL (always the cron's latest):
+   `https://raw.githubusercontent.com/marc4data/world-cup-2026/main/reports/worldcup_tables.xlsx`
+
 ## Build status
 
 Built milestone-by-milestone (see `CLAUDE.md`). **M0 — scaffold:** complete.
