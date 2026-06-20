@@ -227,6 +227,25 @@ until the local clone is pulled. Two ways to stay current:
    Data source URL (always the cron's latest):
    `https://raw.githubusercontent.com/marc4data/world-cup-2026/main/reports/worldcup_tables.xlsx`
 
+## Visual iteration on HTML graphics
+
+`scripts/render_html.py` renders an HTML file (or URL) to image(s) with headless
+Chromium (Playwright), closing the same render → look → iterate loop the matplotlib
+reports have — but for HTML/CSS/JS (the Plotly maps draw correctly). It also turns a
+multi-page print doc into one clean image per page.
+
+```bash
+# one-time setup into the .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m playwright install chromium
+
+# the 4-page infographic -> 4 page JPEGs (wc-page-1.jpg … wc-page-4.jpg)
+python scripts/render_html.py world-cup-2026.html --pages ".page" --out /tmp/wc-page.jpg
+# whole page / single element
+python scripts/render_html.py world-cup-2026.html --out /tmp/wc.png --full-page
+python scripts/render_html.py world-cup-2026.html --out /tmp/map.png --selector "#venue-map"
+```
+
 ## Build status
 
 Built milestone-by-milestone (see `CLAUDE.md`). **M0 — scaffold:** complete.

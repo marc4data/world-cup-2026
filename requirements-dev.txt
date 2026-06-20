@@ -1,0 +1,10 @@
+# Local development tooling — NOT needed by the pipeline or CI (kept separate so the
+# core install stays lean). Install into the .venv when you need these capabilities.
+
+# Headless-browser HTML rendering for the visual-feedback loop (scripts/render_html.py).
+# After pip install, fetch the browser binary once:
+#     python -m playwright install chromium
+playwright==1.60.0
+
+# Print-friendly .docx exports (e.g. docs/standings_rank_tiebreaker.docx).
+python-docx==1.2.0
