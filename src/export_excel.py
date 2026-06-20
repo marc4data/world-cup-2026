@@ -61,8 +61,12 @@ def export_tables_to_excel(
         conn.close()
 
 
+_LINK_FONT = Font(color="0563C1", underline="single")
+
+
 def _format_sheet(ws, df: pd.DataFrame) -> None:
-    """Freeze the header, bold it, add an autofilter, and size columns."""
+    """Freeze + bold the header, add an autofilter, size columns, and make URL
+    columns (header ends in 'url') real clickable hyperlinks."""
     ws.freeze_panes = "A2"
     for cell in ws[1]:
         cell.font = Font(bold=True)
@@ -71,6 +75,12 @@ def _format_sheet(ws, df: pd.DataFrame) -> None:
         sample = (str(v) for v in df[col].head(200))
         width = max([len(str(col))] + [len(s) for s in sample], default=8)
         ws.column_dimensions[get_column_letter(i)].width = min(max(width + 2, 8), 40)
+        if str(col).lower().endswith(("url", "api")):   # *_url + the ESPN/FIFA *_api endpoints
+            for row in range(2, ws.max_row + 1):
+                cell = ws.cell(row=row, column=i)
+                if isinstance(cell.value, str) and cell.value.startswith("http"):
+                    cell.hyperlink = cell.value
+                    cell.font = _LINK_FONT
 
 
 def main(argv=None) -> int:
