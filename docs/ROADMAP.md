@@ -37,15 +37,21 @@ pipeline today without the web frontend.
 > `fixture`** (not a separate `fixture_links` view) so they appear in the `fixture` Excel
 > tab; the export renders any `*_url`/`*_api` column as a clickable hyperlink. The legacy
 > `fixture_links` view is dropped in `init_db`.
-| **ER-9** | Knockout bracket | **p1:** `group_qualification` clinch analysis (`qualification.py`) → **p2:** best-3rd cross-group + FIFA R32 slot template → **p3:** bracket table/view + report | API-Football standings/fixtures | ✅ yes | Med–High | 🟡 **phase 1 done** |
+| **ER-9** | Knockout bracket | **p1:** `group_qualification` clinch analysis (`qualification.py`) → **p2:** best-3rd cross-group + FIFA R32 slot template → **p3:** bracket report filling resolved teams | API-Football standings/fixtures | ✅ yes | Med–High | 🟢 **phases 1–3 done** |
 
 > **ER-9 phases.** *Phase 1 (done 2026-06-20):* per-group clinch analysis — each team's
 > guaranteed best/worst finishing position via remaining-outcome enumeration
-> (`group_qualification` table, auto-exported). *Phase 2:* rank the 12 third-placed teams
-> to pick the 8 that advance, and encode FIFA's published Round-of-32 slot template
-> (which group-position meets which). *Phase 3:* a `bracket` table/view + report, filling
-> resolved teams as groups clinch. Phase 2 needs the official R32 mapping confirmed (not
-> fabricated); knockout match IDs come from ER-8b.
+> (`group_qualification` table, auto-exported). *Phase 2 (done 2026-06-20):* best-3rd
+> ranking (`_thirds_in_top8`) + the FIFA Round-of-32 slot template and R16→Final tree,
+> **reverse-engineered from `world-cup-2026.html`** (its SVG feeder labels + connector
+> geometry, not fabricated) and encoded as data in `report_html.py`
+> (`_R32_LEFT`/`_R32_RIGHT`/`_TREE_*`). *Phase 3 (done 2026-06-20):* `page_bracket.html`
+> — the 32 slots resolve to each group's current Winner/Runner-up with a clinch glyph;
+> 3rd-place slots stay TBD (FIFA assigns once the 8 best 3rds are set) but surface the
+> current top-8 thirds as chips; a central funnel traces R16→QF→SF→3rd→Final by match
+> number. *Remaining:* per-match knockout dates were recovered from the infographic SVG
+> (M74/M76 unrecoverable → "date TBD"); a future ER-8b would supply authoritative
+> knockout match IDs/dates from the API once the bracket is drawn.
 
 > **ER-8 note.** Full handoff in `docs/ESPN_FIFA_Xref_Requirements.md`; the 72-row static
 > dataset (`data/espn_fifa_xref.csv`) is produced and verified (72/72 group matches).
