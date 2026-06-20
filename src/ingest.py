@@ -22,9 +22,17 @@ import requests
 import db
 import integrity
 import openmeteo
+import ranking
 import transform
 from apifootball import APIFootball
-from config import CUTOFF_TZ, DB_PATH, MAX_NEW_PREDICTIONS_PER_RUN, TEAM_HISTORY_CSV
+from config import (
+    CUTOFF_TZ,
+    DB_PATH,
+    LEAGUE_ID,
+    MAX_NEW_PREDICTIONS_PER_RUN,
+    SEASON,
+    TEAM_HISTORY_CSV,
+)
 
 
 def _now_utc_iso() -> str:
@@ -66,9 +74,11 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
     )
     db.upsert(conn, "fixture", fixture_rows, ["fixture_id"])
 
-    # 4) Standings upsert (after teams exist).
+    # 4) Standings upsert (after teams exist), then compute our FIFA-correct rank
+    #    (needs fixtures, just upserted, for head-to-head). See ranking.py.
     db.upsert(conn, "standing", standing_rows,
               ["season", "league_id", "group_label", "team_id"])
+    ranking.update_rank_fifa(conn, SEASON, LEAGUE_ID)
 
     # 5) Predictions: pre-match projections for UPCOMING fixtures without a
     #    cached row, capped, immutable. Finished matches are skipped (a pre-match

@@ -4,12 +4,13 @@ Running backlog of things to address — not blockers, tracked so they don't sli
 Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
 
 ## Data quality / availability
-- 🟡 **`standing.rank` tiebreaker is the API's, not FIFA's.** API-Football ranks by
-  Points → GD → GF then stops; it does not implement the official FIFA check-down
-  (head-to-head, fair play, lots), and deep-tie ordering is arbitrary. Reconciliation
-  checks points only, not rank. Matters at end of group stage. Full write-up:
-  [standings_rank_tiebreaker.md](standings_rank_tiebreaker.md). Fix: compute `rank_fifa`
-  from fixtures + integrity check; also store the API `description` (qualification) field.
+- ✅ **`standing.rank` tiebreaker fixed (2026-06-19).** We now compute `rank_fifa`
+  ourselves (overall pts→GD→GF → head-to-head → fair-play → API-rank fallback; see
+  `ranking.py`), store it alongside the API `rank`, and `integrity.reconcile_rank`
+  warns on any divergence. The API `description` (qualification status) is now stored too.
+  Background: [standings_rank_tiebreaker.md](standings_rank_tiebreaker.md). Note: the
+  group report still *displays* the API `rank` — switch it to `rank_fifa` if/when they
+  diverge near matchday 3.
 - 🟡 **Prediction coverage is uneven (D7).** ~31/56 upcoming fixtures return a real
   forecast; the rest say "No predictions available" (e.g. all of Group I). Placeholders
   are intentionally not cached so they fill in on later runs. Re-probing is capped at

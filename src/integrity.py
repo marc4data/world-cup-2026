@@ -147,6 +147,26 @@ def reconcile_standings(conn: sqlite3.Connection) -> list[str]:
     ]
 
 
+def reconcile_rank(conn: sqlite3.Connection) -> list[str]:
+    """Flag where our FIFA-correct rank_fifa disagrees with the API's rank.
+
+    A mismatch means the official check-down (head-to-head / fair-play) reordered
+    teams the API ranked only by points→GD→GF (see docs/standings_rank_tiebreaker.md).
+    A warning, not an error — both can be "right" on as-yet-unresolved ties, but a
+    difference is worth surfacing, especially near the final group matchday.
+    """
+    rows = conn.execute(
+        "SELECT group_label, team_id, rank, rank_fifa FROM standing "
+        "WHERE rank IS NOT NULL AND rank_fifa IS NOT NULL AND rank <> rank_fifa "
+        "ORDER BY group_label, rank_fifa"
+    ).fetchall()
+    return [
+        f"standing: {r['group_label']} team {r['team_id']} "
+        f"api_rank={r['rank']} rank_fifa={r['rank_fifa']}"
+        for r in rows
+    ]
+
+
 def run_all_checks(conn: sqlite3.Connection) -> IntegrityReport:
     """Run every check and bucket results into errors vs warnings."""
     report = IntegrityReport()
@@ -154,6 +174,7 @@ def run_all_checks(conn: sqlite3.Connection) -> IntegrityReport:
     report.errors.extend(check_orphans(conn))
     report.errors.extend(check_finished_have_scores(conn))
     report.warnings.extend(reconcile_standings(conn))
+    report.warnings.extend(reconcile_rank(conn))
     return report
 
 

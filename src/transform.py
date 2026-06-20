@@ -113,6 +113,7 @@ def transform_standings(raw_standings: list[dict]) -> tuple[list[dict], dict[int
                 "goals_diff": r.get("goalsDiff"),
                 "points": r.get("points"),
                 "form": r.get("form"),
+                "description": r.get("description"),  # API qualification status
             })
     return rows, team_to_group
 

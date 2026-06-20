@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS standing (
   goals_diff  INTEGER,
   points      INTEGER,
   form        TEXT,
+  rank_fifa   INTEGER,   -- our FIFA-correct rank (see ranking.py); API rank is `rank`
+  description TEXT,       -- API qualification status, e.g. "Promotion - ..."
   PRIMARY KEY (season, league_id, group_label, team_id),
   FOREIGN KEY (team_id) REFERENCES team(team_id)
 );
@@ -251,6 +253,10 @@ _COLUMN_MIGRATIONS = {
         ("wikidata_qid", "TEXT"),
         ("image_url", "TEXT"),
         ("opening_year", "INTEGER"),
+        ("description", "TEXT"),
+    ],
+    "standing": [
+        ("rank_fifa", "INTEGER"),
         ("description", "TEXT"),
     ],
 }
