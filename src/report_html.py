@@ -79,9 +79,9 @@ def _team_cell(code, name, logo, side, *, winner_side, finished, align) -> str:
     cls = "team " + align
     if side == winner_side:
         cls += " win" if finished else " fav"
-    if align == "home":
-        return f'<span class="{cls}" title="{html.escape(name or "")}">{code}{img}</span>'
-    return f'<span class="{cls}" title="{html.escape(name or "")}">{img}{code}</span>'
+    inner = f'{code}{img}' if align == "home" else f'{img}{code}'
+    # the .pick wrapper hugs flag+code, so the win/fav outline is snug (not the whole column)
+    return f'<span class="{cls}" title="{html.escape(name or "")}"><span class="pick">{inner}</span></span>'
 
 
 def _match_row(m, today) -> str:
@@ -198,7 +198,7 @@ def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
     <div class="title">Group-Stage Schedule — 72 Matches</div>
     <div class="meta">{played}/72 played · times Pacific · click a match → FIFA match-centre</div>
   </header>
-  <div class="legend"><span class="lgrp">A–L = group</span><span class="key"><b>bold</b>=winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
+  <div class="legend"><span class="lgrp">A–L = group</span><span class="key"><span class="kpick">outlined</span> = winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
   <div class="body">
     <div class="schedule">{blocks}</div>
     {_sidebar(conn, matches, today)}
@@ -220,7 +220,7 @@ def render(db_path=DB_PATH, out_path=REPORT_PATH, *, today=None) -> str:
 
 # --- Groups page: standings tables (left) + schedule (right) ----------------
 GROUPS_PATH = REPORT_PATH.with_name("page_groups.html")
-_STAND_COLS = ["#", "Team", "P", "W", "D", "L", "GF", "GA", "GD", "Pts"]
+_STAND_COLS = ["#", "Team", "P", "Pts", "GD"]
 
 
 def load_group_standings(conn, group):
@@ -247,11 +247,9 @@ def _standings_table(group, rows) -> str:
         body.append(
             f'<tr class="{" ".join(cls)}"><td>{r["pos"]}</td>'
             f'<td class="tm"><span class="tw">{logo}{html.escape(r["code"])}</span></td>'
-            f'<td>{r["played"]}</td><td>{r["win"]}</td><td>{r["draw"]}</td><td>{r["lose"]}</td>'
-            f'<td>{r["goals_for"]}</td><td>{r["goals_against"]}</td>'
-            f'<td>{gd}</td><td class="pts">{r["points"]}</td></tr>')
+            f'<td>{r["played"]}</td><td class="pts">{r["points"]}</td><td>{gd}</td></tr>')
     head = "".join(f"<th>{c}</th>" for c in _STAND_COLS)
-    return (f'<table class="gt"><caption>{group[-1]}</caption>'
+    return (f'<table class="gt"><caption>{html.escape(group)}</caption>'
             f'<thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table>')
 
 
@@ -274,7 +272,7 @@ def build_groups_page(conn: sqlite3.Connection, today=None) -> str:
     <div class="meta">{played}/72 played · top 2 advance (+ 8 best 3rd) · times Pacific</div>
   </header>
   <div class="legend"><span class="lgrp">green = top-2 zone · gold = won group · grey = out of top 2</span>
-    <span class="key"><b>bold</b>=winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
+    <span class="key"><span class="kpick">outlined</span> = winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
   <div class="gbody">
     <div class="gtables">{tables}</div>
     <div class="gsched">{blocks}</div>
@@ -308,6 +306,7 @@ header .meta { font-size:9.5px; opacity:.8; }
           background:#f4f6f8; border-bottom:1px solid #e3e7eb; color:#37474f; }
 .legend .lg-item { display:inline-flex; align-items:center; gap:3px; }
 .legend .key { margin-left:auto; color:#607d8b; }
+.legend .kpick { border:1.3px solid #455a64; border-radius:3px; padding:0 3px; font-weight:700; color:#37474f; }
 .grp { width:13px; text-align:center; font-weight:700; font-size:9px; color:#455a64; flex:0 0 auto; }
 .lgrp { color:#607d8b; font-weight:700; }
 .body { flex:1; display:flex; gap:12px; padding:8px 16px; overflow:hidden; }
@@ -339,12 +338,13 @@ header .meta { font-size:9.5px; opacity:.8; }
 .fx { display:flex; align-items:center; gap:3px; font-size:10.5px; padding:2.5px 1px; text-decoration:none;
       color:inherit; border-bottom:1px solid #f0f2f4; }
 .fx:hover { background:#eef4fb; }
-.fx .t { width:46px; color:#78909c; font-size:9.5px; flex:0 0 auto; }
-.fx .team { flex:1; display:inline-flex; align-items:center; gap:3px; overflow:hidden; white-space:nowrap; }
+.fx .t { width:34px; color:#78909c; font-size:9.5px; flex:0 0 auto; white-space:nowrap; }
+.fx .team { flex:1; display:inline-flex; align-items:center; overflow:hidden; white-space:nowrap; }
 .fx .team.home { justify-content:flex-end; }
 .fx .team.away { justify-content:flex-start; }
-.fx .team.win { font-weight:800; color:#1B5E20; }
-.fx .team.fav { font-weight:800; color:#0D47A1; }
+.fx .pick { display:inline-flex; align-items:center; gap:3px; border:1.3px solid transparent; padding:0 2px; border-radius:3px; }
+.fx .team.win .pick { border-color:#2E7D32; color:#1B5E20; font-weight:700; background:#F1F8F1; }
+.fx .team.fav .pick { border-color:#0D47A1; color:#0D47A1; font-weight:700; background:#F0F5FC; }
 .fx .lg { width:14px; height:14px; object-fit:contain; }
 .fx .score { width:40px; text-align:center; font-weight:800; flex:0 0 auto; }
 .fx .proj { width:40px; text-align:center; color:#0D47A1; font-size:9px; flex:0 0 auto; }
@@ -355,19 +355,19 @@ footer { font-size:8px; color:#90a4ae; padding:3px 16px; border-top:1px solid #e
 
 # Extra CSS for the Groups page (standings tables left, schedule right).
 _GROUPS_CSS = """
-.gbody { flex:1; display:flex; gap:14px; padding:8px 16px; overflow:hidden; }
-.gtables { width:4.75in; flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr;
-           gap:8px 14px; align-content:start; }
-.gsched { flex:1; column-count:3; column-gap:12px; }
-.gt { width:100%; border-collapse:collapse; font-size:8px; }
-.gt caption { text-align:left; font-weight:800; font-size:10.5px; color:""" + NAVY + """;
-              border-bottom:2px solid """ + GOLD + """; padding-bottom:1px; margin-bottom:2px; }
-.gt th { background:#37474F; color:#fff; font-weight:700; padding:1px 2px; text-align:center; font-size:7px; }
+.gbody { flex:1; display:flex; gap:16px; padding:8px 16px; overflow:hidden; }
+.gtables { width:3.35in; flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr;
+           grid-template-rows:repeat(6,1fr); grid-auto-flow:column; gap:0 16px; height:100%; }
+.gsched { flex:1; column-count:3; column-gap:13px; }
+.gt { width:100%; border-collapse:collapse; font-size:10px; align-self:center; }
+.gt caption { background:""" + NAVY + """; color:#fff; text-align:left; font-weight:800;
+              font-size:10.5px; padding:2.5px 7px; letter-spacing:.4px; }
+.gt th { background:#5a6b7a; color:#fff; font-weight:700; padding:2px 3px; text-align:center; font-size:8.5px; }
 .gt th:nth-child(2) { text-align:left; }
-.gt td { padding:1.5px 2px; text-align:center; border-bottom:1px solid #eceff1; }
+.gt td { padding:2.5px 4px; text-align:center; border-bottom:1px solid #eceff1; }
 .gt td.tm { text-align:left; }
-.gt td.tm .tw { display:inline-flex; align-items:center; gap:3px; font-weight:600; }
-.gt td.tm .lg { width:12px; height:12px; object-fit:contain; }
+.gt td.tm .tw { display:inline-flex; align-items:center; gap:4px; font-weight:600; }
+.gt td.tm .lg { width:15px; height:15px; object-fit:contain; }
 .gt td.pts { font-weight:800; }
 .gt tr.qz td { background:#E8F5E9; }
 .gt tr.won td { background:#FFF6D6; }
