@@ -50,10 +50,9 @@ jobs:
           APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
         run: python src/ingest.py --mode "${{ github.event.inputs.mode || 'incremental' }}"
 
-      - name: Refresh per-match news (ER-6, capped; skips if no key)
-        env:
-          GNEWS_KEY: ${{ secrets.GNEWS_KEY }}
-        run: python src/news_ingest.py --max-fixtures 10
+      # ER-6 (GNews) retired 2026-06-20 — superseded by ER-8 ESPN/FIFA deep links.
+      # news_ingest.py / gnews.py and the existing `news` table remain (dormant) for
+      # history; no daily GNews calls are made. Revive by re-adding a news step.
 
       - name: Refresh Excel export
         run: python src/export_excel.py

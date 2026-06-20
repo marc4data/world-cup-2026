@@ -220,6 +220,29 @@ CREATE TABLE IF NOT EXISTS news (        -- ER-6: per-match news links
   FOREIGN KEY (fixture_id) REFERENCES fixture(fixture_id)
 );
 
+-- ER-9 phase 1: group qualification / clinch analysis (computed; see qualification.py)
+CREATE TABLE IF NOT EXISTS group_qualification (
+  season      INTEGER NOT NULL,
+  league_id   INTEGER NOT NULL,
+  group_label TEXT NOT NULL,
+  team_id     INTEGER NOT NULL,
+  position    INTEGER,
+  played      INTEGER,
+  remaining   INTEGER,
+  points      INTEGER,
+  goals_diff  INTEGER,
+  goals_for   INTEGER,
+  best_pos    INTEGER,
+  worst_pos   INTEGER,
+  clinched_first  INTEGER,
+  clinched_top2   INTEGER,
+  eliminated_top2 INTEGER,
+  status      TEXT,
+  captured_at TEXT,
+  PRIMARY KEY (season, league_id, group_label, team_id),
+  FOREIGN KEY (team_id) REFERENCES team(team_id)
+);
+
 CREATE TABLE IF NOT EXISTS load_run (
   run_id      INTEGER PRIMARY KEY AUTOINCREMENT,
   run_type    TEXT,

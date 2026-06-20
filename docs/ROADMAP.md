@@ -29,9 +29,18 @@ pipeline today without the web frontend.
 | **ER-3** | Authoritative venue capacities | `venue.capacity` ← `venues_geo.csv` | FIFA figures + Wikidata | ✅ yes | Low | ✅ **done** |
 | **ER-4** | Venue enrichment (image, year, history) | `venue` columns ← `venues_enrich.csv` (fetched by `venue_enrich.py`) | Wikidata QID + Commons + Wikipedia | ✅ yes (static) | Med | ✅ **done** |
 | **ER-5** | Team World Cup history (titles, appearances) | `team_history` table ← `team_history.csv` (static) | curated seed; verify vs jfjelstul | ✅ yes | Low–Med | ✅ **done** (curated seed) |
-| **ER-6** | Per-match news links | `news` table ← `news_ingest.py` (GNews) | GNews (key stored) | ✅ yes | Low | ✅ **done** |
+| **ER-6** | Per-match news links | `news` table ← `news_ingest.py` (GNews) | GNews (key stored) | ✅ yes | Low | 🗄️ **retired** (superseded by ER-8) |
 | **ER-7** | Goal highlight clips (embed) | frontend feature; optional `highlights` table | Scorebat (free) | ❌ frontend-centric | Med–High | 🟢 proposed |
 | **ER-8** | ESPN/FIFA match cross-reference (IDs + content deep-links) | `fixture` cols `espn_game_id`/`fifa_id_match`/`fifa_match_num` + `fixture_links` view ← `espn_fifa_xref.csv` (static) | ESPN + FIFA public APIs | ✅ yes (static) | Low–Med | ✅ **done** (group; 72/72) |
+| **ER-9** | Knockout bracket | **p1:** `group_qualification` clinch analysis (`qualification.py`) → **p2:** best-3rd cross-group + FIFA R32 slot template → **p3:** bracket table/view + report | API-Football standings/fixtures | ✅ yes | Med–High | 🟡 **phase 1 done** |
+
+> **ER-9 phases.** *Phase 1 (done 2026-06-20):* per-group clinch analysis — each team's
+> guaranteed best/worst finishing position via remaining-outcome enumeration
+> (`group_qualification` table, auto-exported). *Phase 2:* rank the 12 third-placed teams
+> to pick the 8 that advance, and encode FIFA's published Round-of-32 slot template
+> (which group-position meets which). *Phase 3:* a `bracket` table/view + report, filling
+> resolved teams as groups clinch. Phase 2 needs the official R32 mapping confirmed (not
+> fabricated); knockout match IDs come from ER-8b.
 
 > **ER-8 note.** Full handoff in `docs/ESPN_FIFA_Xref_Requirements.md`; the 72-row static
 > dataset (`data/espn_fifa_xref.csv`) is produced and verified (72/72 group matches).

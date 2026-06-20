@@ -27,10 +27,10 @@ Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
 - 🟡 **Standings "Group Stage" 13th block (D6).** Filtered out; monitor in case the API shape changes.
 
 ## Pipeline / ops
-- 🟡 **GNews (ER-6) budget + ToS.** Free tier ~100 req/day — the daily job is capped at
-  10 fixtures/run (fetch-if-missing), which stays well under. Article *links* (title +
-  url + source) are displayed, not full content; confirm GNews ToS before any public
-  dashboard ships these. `GNEWS_KEY` is a repo secret + in the central `.env`.
+- 🗄️ **GNews (ER-6) retired 2026-06-20** — superseded by ER-8's deterministic ESPN/FIFA
+  deep links. The daily news step was removed; `news_ingest.py`/`gnews.py` and the existing
+  `news` table stay dormant (history preserved). `GNEWS_KEY` secret + central `.env` entry
+  can be removed whenever; left in place harmlessly. Revive by re-adding a news step.
 - ✅ **Node 20 deprecation fixed (2026-06-16).** Bumped `actions/checkout@v6` +
   `actions/setup-python@v6` (both Node 24). No more deprecation warnings.
 - 🟢 ✅ **Cron verified.** The scheduled run fired 2026-06-16 12:54 UTC (GitHub delays

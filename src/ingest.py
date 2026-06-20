@@ -22,6 +22,7 @@ import requests
 import db
 import integrity
 import openmeteo
+import qualification
 import ranking
 import transform
 from apifootball import APIFootball
@@ -83,6 +84,8 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
     db.upsert(conn, "standing", standing_rows,
               ["season", "league_id", "group_label", "team_id"])
     ranking.update_rank_fifa(conn, SEASON, LEAGUE_ID)
+    # ER-9 phase 1: group clinch analysis (needs standings + remaining fixtures).
+    qualification.update_qualification(conn, SEASON, LEAGUE_ID, _now_utc_iso())
 
     # 5) Predictions: pre-match projections for UPCOMING fixtures without a
     #    cached row, capped, immutable. Finished matches are skipped (a pre-match
