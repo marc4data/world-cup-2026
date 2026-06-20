@@ -17,7 +17,9 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from config import (
+    APIFOOTBALL_TO_FIFA_CODE,
     CUTOFF_TZ,
+    ESPN_FIFA_XREF_CSV,
     FINISHED_STATUSES,
     LEAGUE_ID,
     SEASON,
@@ -356,6 +358,50 @@ def transform_team_stats(raw_teams: list[dict], fixture_id: int, captured_at: st
                 row["xg"] = _to_float(s.get("value"))
         rows.append(row)
     return rows
+
+
+# --- ER-8: ESPN / FIFA match cross-reference (static CSV) -------------------
+def _load_match_xref(path=ESPN_FIFA_XREF_CSV) -> dict[frozenset, dict]:
+    """{frozenset({home_code, away_code}) -> xref row}. Empty if the file is absent."""
+    if not Path(path).exists():
+        return {}
+    out = {}
+    with open(path, newline="") as fh:
+        for r in csv.DictReader(fh):
+            out[frozenset({r["home_code"], r["away_code"]})] = r
+    return out
+
+
+def _fifa_code(api_code: str | None) -> str | None:
+    """API-Football team.code -> FIFA tri-code (remaps CUR->CUW, CGO->COD)."""
+    if not api_code:
+        return None
+    return APIFOOTBALL_TO_FIFA_CODE.get(api_code, api_code)
+
+
+def merge_match_xref(
+    fixture_rows: list[dict],
+    team_code_by_id: dict[int, str],
+    xref: dict[frozenset, dict] | None = None,
+) -> set[str]:
+    """In place: set espn_game_id / fifa_id_match / fifa_match_num on each fixture row.
+
+    Joins on the unordered FIFA tri-code pair (unique in the group stage). Returns the
+    set of group-stage fixtures that had no xref row (knockouts get NULLs silently).
+    """
+    if xref is None:
+        xref = _load_match_xref()
+    unmatched = set()
+    for fr in fixture_rows:
+        hc = _fifa_code(team_code_by_id.get(fr["home_team_id"]))
+        ac = _fifa_code(team_code_by_id.get(fr["away_team_id"]))
+        row = xref.get(frozenset({hc, ac})) if (hc and ac) else None
+        fr["espn_game_id"] = int(row["espn_game_id"]) if row else None
+        fr["fifa_id_match"] = int(row["fifa_id_match"]) if row else None
+        fr["fifa_match_num"] = int(row["fifa_match_num"]) if row else None
+        if row is None and fr.get("group_label"):   # a group match we expected to map
+            unmatched.add(f'{fr["fixture_id"]} {hc}-{ac}')
+    return unmatched
 
 
 # --- ER-6: per-match news links --------------------------------------------

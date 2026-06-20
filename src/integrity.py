@@ -167,6 +167,29 @@ def reconcile_rank(conn: sqlite3.Connection) -> list[str]:
     ]
 
 
+def check_match_xref(conn: sqlite3.Connection) -> list[str]:
+    """ER-8: finished group fixtures should carry ESPN/FIFA IDs, and IDs are unique.
+
+    A warning (not an error): knockout/early gaps legitimately have NULL IDs, and we
+    don't want graceful-degradation cases failing CI.
+    """
+    problems = []
+    missing = conn.execute(
+        "SELECT COUNT(*) FROM fixture WHERE group_label IS NOT NULL AND is_finished = 1 "
+        "AND (espn_game_id IS NULL OR fifa_id_match IS NULL)"
+    ).fetchone()[0]
+    if missing:
+        problems.append(f"fixture: {missing} finished group fixture(s) missing ESPN/FIFA IDs")
+    for col in ("espn_game_id", "fifa_id_match"):
+        dups = conn.execute(
+            f"SELECT {col}, COUNT(*) n FROM fixture WHERE {col} IS NOT NULL "
+            f"GROUP BY {col} HAVING n > 1"
+        ).fetchall()
+        for r in dups:
+            problems.append(f"fixture: duplicate {col}={r[col]} x{r['n']}")
+    return problems
+
+
 def run_all_checks(conn: sqlite3.Connection) -> IntegrityReport:
     """Run every check and bucket results into errors vs warnings."""
     report = IntegrityReport()
@@ -175,6 +198,7 @@ def run_all_checks(conn: sqlite3.Connection) -> IntegrityReport:
     report.errors.extend(check_finished_have_scores(conn))
     report.warnings.extend(reconcile_standings(conn))
     report.warnings.extend(reconcile_rank(conn))
+    report.warnings.extend(check_match_xref(conn))
     return report
 
 

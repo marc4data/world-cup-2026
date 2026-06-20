@@ -17,3 +17,6 @@ __pycache__/
 
 # Office lock/temp files (e.g. ~$worldcup_tables.xlsx when the workbook is open)
 ~$*
+
+# Manual Excel backups
+reports/*_backup_*.xlsx

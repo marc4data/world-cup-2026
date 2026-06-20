@@ -31,6 +31,12 @@ pipeline today without the web frontend.
 | **ER-5** | Team World Cup history (titles, appearances) | `team_history` table ← `team_history.csv` (static) | curated seed; verify vs jfjelstul | ✅ yes | Low–Med | ✅ **done** (curated seed) |
 | **ER-6** | Per-match news links | `news` table ← `news_ingest.py` (GNews) | GNews (key stored) | ✅ yes | Low | ✅ **done** |
 | **ER-7** | Goal highlight clips (embed) | frontend feature; optional `highlights` table | Scorebat (free) | ❌ frontend-centric | Med–High | 🟢 proposed |
+| **ER-8** | ESPN/FIFA match cross-reference (IDs + content deep-links) | `fixture` cols `espn_game_id`/`fifa_id_match`/`fifa_match_num` + `fixture_links` view ← `espn_fifa_xref.csv` (static) | ESPN + FIFA public APIs | ✅ yes (static) | Low–Med | ✅ **done** (group; 72/72) |
+
+> **ER-8 note.** Full handoff in `docs/ESPN_FIFA_Xref_Requirements.md`; the 72-row static
+> dataset (`data/espn_fifa_xref.csv`) is produced and verified (72/72 group matches).
+> Rights-safe deep links (incl. ESPN highlights URL + FIFA match-centre), so it doubles
+> as a link-only precursor to ER-7's embeds and ships without the web frontend.
 
 ## Recommended sequencing (data layer first)
 
@@ -40,7 +46,8 @@ pipeline today without the web frontend.
 4. **ER-5 — team WC history** (static dataset; no live cadence).
 5. **ER-4 — venue enrichment** (Wikidata; static, attribution matters).
 6. **ER-6 — news links** (needs a news API key + ToS check).
-7. **ER-7 — highlights** (belongs with the web frontend; embeds-only, rights-safe).
+7. **ER-8 — ESPN/FIFA cross-reference** (static, one-time load like ER-3/4/5; no daily-cron cost; data + spec ready).
+8. **ER-7 — highlights** (belongs with the web frontend; embeds-only, rights-safe).
 
 Each is independently shippable as a milestone (table + transform + integrity + ingest
 + tests + a report/export surface), reviewed like M1–M7. Static-load ERs (3/4/5) run

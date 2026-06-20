@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS fixture (
   away_goals   INTEGER,
   score_ht     TEXT,
   score_ft     TEXT,
+  espn_game_id   INTEGER,   -- ER-8: ESPN gameId    (from espn_fifa_xref.csv)
+  fifa_id_match  INTEGER,   -- ER-8: FIFA idMatch
+  fifa_match_num INTEGER,   -- ER-8: FIFA MatchNumber 1..72
   FOREIGN KEY (home_team_id) REFERENCES team(team_id),
   FOREIGN KEY (away_team_id) REFERENCES team(team_id),
   FOREIGN KEY (venue_id)     REFERENCES venue(venue_id)
@@ -228,6 +231,25 @@ CREATE TABLE IF NOT EXISTS load_run (
   status      TEXT,
   notes       TEXT
 );
+
+-- ER-8: per-match ESPN/FIFA deep links derived from the stored IDs. A view (not a
+-- table) keeps the base normalized and the links can never drift from the IDs; the
+-- schema-driven Excel export turns it into a sheet automatically. `|| NULL` yields
+-- NULL, so link cells are blank for fixtures without IDs (knockouts) — graceful.
+CREATE VIEW IF NOT EXISTS fixture_links AS
+SELECT
+  fixture_id, season, league_id, group_label, kickoff_utc,
+  home_team_id, away_team_id,
+  espn_game_id, fifa_id_match, fifa_match_num,
+  'https://www.espn.com/soccer/match/_/gameId/'      || espn_game_id AS espn_summary_url,
+  'https://www.espn.com/soccer/report/_/gameId/'     || espn_game_id AS espn_recap_url,
+  'https://www.espn.com/soccer/video/_/gameId/'      || espn_game_id AS espn_highlights_url,
+  'https://www.espn.com/soccer/matchstats/_/gameId/' || espn_game_id AS espn_stats_url,
+  'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=' || espn_game_id AS espn_json_api,
+  'https://www.fifa.com/en/match-centre/match/17/285023/289273/' || fifa_id_match AS fifa_match_centre_url,
+  'https://api.fifa.com/api/v3/calendar/matches?idCompetition=17&idSeason=285023&count=104&language=en' AS fifa_data_api,
+  'https://api.fifa.com/api/v3/live/football/17/285023/289273/' || fifa_id_match || '?language=en' AS fifa_single_match_api
+FROM fixture;
 """
 
 
@@ -258,6 +280,11 @@ _COLUMN_MIGRATIONS = {
     "standing": [
         ("rank_fifa", "INTEGER"),
         ("description", "TEXT"),
+    ],
+    "fixture": [                      # ER-8
+        ("espn_game_id", "INTEGER"),
+        ("fifa_id_match", "INTEGER"),
+        ("fifa_match_num", "INTEGER"),
     ],
 }
 

@@ -72,6 +72,10 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
     fixture_rows, unmatched_venues = transform.transform_fixtures(
         api.get_fixtures(), team_to_group, venue_map, cutoff_date=cutoff
     )
+    # ER-8: attach ESPN/FIFA IDs from the static cross-reference before the upsert,
+    # so they're written every run (needs team codes, which the pure transform lacks).
+    team_code_by_id = {t["team_id"]: t["code"] for t in team_rows}
+    xref_unmatched = transform.merge_match_xref(fixture_rows, team_code_by_id)
     db.upsert(conn, "fixture", fixture_rows, ["fixture_id"])
 
     # 4) Standings upsert (after teams exist), then compute our FIFA-correct rank
@@ -158,6 +162,7 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
                    f"optional_errors={optional_errors}"]
     if unmatched_venues:
         notes_parts.append("unmatched_venues=" + "|".join(sorted(unmatched_venues)))
+    notes_parts.append(f"xref_unmatched={len(xref_unmatched)}")
     db.insert_row(conn, "load_run", {
         "run_type": mode,
         "started_at": started,
@@ -187,6 +192,7 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
         "weather_added": weather_added,
         "weather_updated": weather_updated,
         "optional_errors": optional_errors,
+        "xref_unmatched": sorted(xref_unmatched),
         "unmatched_venues": sorted(unmatched_venues),
         "errors": report.errors,
         "warnings": report.warnings,

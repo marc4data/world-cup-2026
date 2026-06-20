@@ -39,8 +39,15 @@ Status legend: 🔴 do soon · 🟡 monitor · 🟢 nice-to-have.
   reproducibility is wanted (they're not pipeline deps, so CI install stays lean).
 
 ## Scope / roadmap
-- 📋 **Dashboard Enhancement Requests (ER-1…ER-7)** are tracked in **[ROADMAP.md](ROADMAP.md)**
+- 📋 **Dashboard Enhancement Requests (ER-1…ER-8)** are tracked in **[ROADMAP.md](ROADMAP.md)**
   — mapped onto this pipeline, with status, lift, and recommended sequencing.
+- ✅ **ER-8 — ESPN/FIFA match cross-reference done (2026-06-20).** `fixture` carries
+  `espn_game_id` / `fifa_id_match` / `fifa_match_num` (additive migration), merged every run
+  from committed `data/espn_fifa_xref.csv` via the FIFA tri-code pair with the `CUR→CUW`,
+  `CGO→COD` remap (D8); a `fixture_links` view derives the 8 ESPN/FIFA deep-link URLs and
+  auto-exports as a sheet. Live: 72/72 group fixtures matched, 0 unmatched; integrity clean.
+  Spec: [ESPN_FIFA_Xref_Requirements.md](ESPN_FIFA_Xref_Requirements.md). **ER-8b** (knockout
+  IDs, different FIFA `idStage`) deferred until knockout teams are set.
 - 🟢 **Knockout coverage.** Only the 72 group-stage fixtures exist so far; knockout rounds
   are created as teams qualify. The report handles the group stage; knockout reporting is future.
 - ✅ **M7 — Phase 2 scaffold done (2026-06-16).** player / player_season_stat /

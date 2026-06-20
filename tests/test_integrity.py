@@ -12,6 +12,8 @@ def _fixture(fid, home, away, *, finished=0, hg=None, ag=None, group="Group A"):
         "status_short": "FT" if finished else "NS", "is_finished": finished,
         "venue_id": None, "home_team_id": home, "away_team_id": away,
         "home_goals": hg, "away_goals": ag, "score_ht": None, "score_ft": None,
+        # ER-8 IDs (unique per fixture) so check_match_xref doesn't flag finished fixtures
+        "espn_game_id": fid, "fifa_id_match": 10000 + fid, "fifa_match_num": fid,
     }
 
 

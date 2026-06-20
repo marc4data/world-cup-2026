@@ -121,6 +121,9 @@ CREATE TABLE fixture (
   home_goals   INTEGER,                    -- NULL until played
   away_goals   INTEGER,
   score_ht     TEXT, score_ft TEXT,
+  espn_game_id   INTEGER,                   -- ER-8: ESPN gameId   (from espn_fifa_xref.csv)
+  fifa_id_match  INTEGER,                   -- ER-8: FIFA idMatch
+  fifa_match_num INTEGER,                   -- ER-8: FIFA MatchNumber 1..72
   FOREIGN KEY (home_team_id) REFERENCES team(team_id),
   FOREIGN KEY (away_team_id) REFERENCES team(team_id),
   FOREIGN KEY (venue_id)     REFERENCES venue(venue_id)
@@ -326,3 +329,22 @@ Findings from eyeballing live API-Football v3 responses. Where the API contradic
 - **D5 — Tournament size differs by edition.** WC2022 = 32 teams / 8 groups (A–H) / 64 matches; WC2026 = 48 teams / 12 groups (A–L) / 104 matches. The M6 report must derive group count from the data, not hard-code 12, so it renders correctly for whichever season is loaded.
 - **D6 — `/standings` emits a spurious 13th "Group Stage" block.** Alongside the real `Group A`–`Group L` tables, the 2026 response includes an extra block of 12 teams all labelled `"Group Stage"`. `transform.transform_standings` filters labels to the regex `^Group [A-L]$`, so this aggregate is ignored for both standing rows and the team→group map.
 - **D7 — WC2026 predictions are partially available.** Many fixtures return `winner.id = null`, `percent = 33/33/33`, `advice = "No predictions available"` (~half of upcoming fixtures as of 2026-06-15). Such placeholders are **not stored** (`transform_prediction` returns None), so immutability protects only *real* forecasts and a genuine prediction can still be captured on a later run. Ingest probes predictions only for **upcoming** (not-yet-finished) fixtures. Real forecasts (e.g. Belgium v Egypt → Belgium, 45/45/10) are stored and cached permanently.
+- **D8 — API-Football team codes differ from FIFA tri-codes for two teams (ER-8).** Joining our fixtures to the ESPN/FIFA cross-reference is keyed on the unordered FIFA tri-code pair. `team.code` from API-Football matches FIFA for 46/48 teams; the exceptions are **Curaçao** (`CUR` → FIFA `CUW`) and **Congo DR** (`CGO` → FIFA `COD`). A two-entry remap (`APIFOOTBALL_TO_FIFA_CODE` in `config.py`) resolves all 72 group fixtures (kickoff times also agree as a secondary check). See §15.
+
+---
+
+## 15. ER-8 — ESPN & FIFA match cross-reference
+
+**Goal.** Carry each match's **ESPN `gameId`** and **FIFA `idMatch`** (plus FIFA `MatchNumber`) on the `fixture` table, and expose the derived ESPN/FIFA content deep-links (summary, recap, highlights, stats, JSON feeds; FIFA match-centre, data API, single-match API) so notebooks, Tableau, and the eventual dashboard can link straight to match content. IDs were verified 72/72 across the group stage with zero misses.
+
+**Why it belongs in the pipeline.** The IDs were first added by hand to the Excel export, but a full rebuild regenerates `worldcup.db` and re-exports the workbook, dropping them. ER-8 makes them regenerate every run.
+
+**Pattern (identical to ER-4 / ER-5 static enrichment).**
+- Static, committed dataset `data/espn_fifa_xref.csv` (72 group rows) — **no daily API calls**; the daily cron cost is unchanged.
+- Merged at ingest by the natural key — the unordered FIFA tri-code pair `{home_code, away_code}` — using the D8 code remap. Group-stage pairings are unique, so the join is exact.
+- Store only the three **IDs** on `fixture` (additive `_COLUMN_MIGRATIONS`); derive all URLs in a `fixture_links` **view**. Because `export_excel` is schema-driven (exports tables *and* views), the IDs land in the `fixture` sheet and a `fixture_links` sheet appears automatically.
+- **Graceful degradation:** a fixture with no cross-reference row (e.g. knockouts before teams are set) gets `NULL` IDs and `NULL` link URLs — never an error. Knockout coverage is **ER-8b**, once the bracket fills in.
+
+**Integrity (warning, not error):** every finished group-stage fixture should have non-NULL `espn_game_id` / `fifa_id_match`; both ids unique where present.
+
+**Full build handoff:** `docs/ESPN_FIFA_Xref_Requirements.md` (file-by-file changes, the `fixture_links` view SQL, the merge function, tests, and acceptance criteria). Status tracked in `ROADMAP.md` (ER-8).

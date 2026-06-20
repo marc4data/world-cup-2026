@@ -39,6 +39,17 @@ DB_PATH = REPO_ROOT / "data" / "worldcup.db"
 VENUES_GEO_CSV = REPO_ROOT / "data" / "venues_geo.csv"
 VENUES_ENRICH_CSV = REPO_ROOT / "data" / "venues_enrich.csv"   # ER-4 (static, fetched)
 TEAM_HISTORY_CSV = REPO_ROOT / "data" / "team_history.csv"
+ESPN_FIFA_XREF_CSV = REPO_ROOT / "data" / "espn_fifa_xref.csv"  # ER-8 (static, committed)
+
+# --- ESPN / FIFA match cross-reference (ER-8) ------------------------------
+# URL-template path components (FIFA match-centre / API) + ESPN league slug.
+FIFA_ID_COMPETITION = "17"
+FIFA_ID_SEASON = "285023"
+FIFA_ID_STAGE_GROUP = "289273"   # group stage; knockouts have other stage ids
+ESPN_LEAGUE_SLUG = "fifa.world"
+
+# API-Football team.code -> FIFA tri-code (only the two codes that differ).
+APIFOOTBALL_TO_FIFA_CODE = {"CUR": "CUW", "CGO": "COD"}
 
 # Central credentials file, OUTSIDE the repo tree (no secret ever lives in-repo).
 # Override with the WC2026_ENV_FILE env var; otherwise use this default path.
