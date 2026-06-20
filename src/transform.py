@@ -20,6 +20,9 @@ from config import (
     APIFOOTBALL_TO_FIFA_CODE,
     CUTOFF_TZ,
     ESPN_FIFA_XREF_CSV,
+    FIFA_ID_COMPETITION,
+    FIFA_ID_SEASON,
+    FIFA_ID_STAGE_GROUP,
     FINISHED_STATUSES,
     LEAGUE_ID,
     SEASON,
@@ -379,6 +382,35 @@ def _fifa_code(api_code: str | None) -> str | None:
     return APIFOOTBALL_TO_FIFA_CODE.get(api_code, api_code)
 
 
+# 8 ESPN/FIFA deep-link columns, materialized on `fixture` (ER-8 Option B). NULL IDs
+# -> NULL URLs (graceful). The FIFA stage path is the group-stage id; knockout rows
+# (ER-8b) will need their own idStage.
+_FIXTURE_LINK_COLS = (
+    "espn_summary_url", "espn_recap_url", "espn_highlights_url", "espn_stats_url",
+    "espn_json_api", "fifa_match_centre_url", "fifa_data_api", "fifa_single_match_api",
+)
+
+
+def _match_links(espn_id: int | None, fifa_id: int | None) -> dict[str, str | None]:
+    espn = (lambda kind: f"https://www.espn.com/soccer/{kind}/_/gameId/{espn_id}") if espn_id else (lambda kind: None)
+    fifa_path = f"{FIFA_ID_COMPETITION}/{FIFA_ID_SEASON}/{FIFA_ID_STAGE_GROUP}"
+    return {
+        "espn_summary_url": espn("match"),
+        "espn_recap_url": espn("report"),
+        "espn_highlights_url": espn("video"),
+        "espn_stats_url": espn("matchstats"),
+        "espn_json_api": (f"https://site.api.espn.com/apis/site/v2/sports/soccer/"
+                          f"fifa.world/summary?event={espn_id}") if espn_id else None,
+        "fifa_match_centre_url": (f"https://www.fifa.com/en/match-centre/match/"
+                                  f"{fifa_path}/{fifa_id}") if fifa_id else None,
+        "fifa_data_api": (f"https://api.fifa.com/api/v3/calendar/matches?"
+                          f"idCompetition={FIFA_ID_COMPETITION}&idSeason={FIFA_ID_SEASON}"
+                          f"&count=104&language=en") if fifa_id else None,
+        "fifa_single_match_api": (f"https://api.fifa.com/api/v3/live/football/"
+                                  f"{fifa_path}/{fifa_id}?language=en") if fifa_id else None,
+    }
+
+
 def merge_match_xref(
     fixture_rows: list[dict],
     team_code_by_id: dict[int, str],
@@ -399,6 +431,7 @@ def merge_match_xref(
         fr["espn_game_id"] = int(row["espn_game_id"]) if row else None
         fr["fifa_id_match"] = int(row["fifa_id_match"]) if row else None
         fr["fifa_match_num"] = int(row["fifa_match_num"]) if row else None
+        fr.update(_match_links(fr["espn_game_id"], fr["fifa_id_match"]))  # materialize URLs
         if row is None and fr.get("group_label"):   # a group match we expected to map
             unmatched.add(f'{fr["fixture_id"]} {hc}-{ac}')
     return unmatched

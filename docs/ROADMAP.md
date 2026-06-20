@@ -31,7 +31,12 @@ pipeline today without the web frontend.
 | **ER-5** | Team World Cup history (titles, appearances) | `team_history` table ← `team_history.csv` (static) | curated seed; verify vs jfjelstul | ✅ yes | Low–Med | ✅ **done** (curated seed) |
 | **ER-6** | Per-match news links | `news` table ← `news_ingest.py` (GNews) | GNews (key stored) | ✅ yes | Low | 🗄️ **retired** (superseded by ER-8) |
 | **ER-7** | Goal highlight clips (embed) | frontend feature; optional `highlights` table | Scorebat (free) | ❌ frontend-centric | Med–High | 🟢 proposed |
-| **ER-8** | ESPN/FIFA match cross-reference (IDs + content deep-links) | `fixture` cols `espn_game_id`/`fifa_id_match`/`fifa_match_num` + `fixture_links` view ← `espn_fifa_xref.csv` (static) | ESPN + FIFA public APIs | ✅ yes (static) | Low–Med | ✅ **done** (group; 72/72) |
+| **ER-8** | ESPN/FIFA match cross-reference (IDs + content deep-links) | `fixture` cols: 3 IDs + 8 materialized URL columns (Option B; merged in `transform.merge_match_xref`) ← `espn_fifa_xref.csv` (static) | ESPN + FIFA public APIs | ✅ yes (static) | Low–Med | ✅ **done** (group; 72/72) |
+
+> **ER-8 layout.** Per user preference the 8 deep-link URLs are **materialized directly on
+> `fixture`** (not a separate `fixture_links` view) so they appear in the `fixture` Excel
+> tab; the export renders any `*_url`/`*_api` column as a clickable hyperlink. The legacy
+> `fixture_links` view is dropped in `init_db`.
 | **ER-9** | Knockout bracket | **p1:** `group_qualification` clinch analysis (`qualification.py`) → **p2:** best-3rd cross-group + FIFA R32 slot template → **p3:** bracket table/view + report | API-Football standings/fixtures | ✅ yes | Med–High | 🟡 **phase 1 done** |
 
 > **ER-9 phases.** *Phase 1 (done 2026-06-20):* per-group clinch analysis — each team's
