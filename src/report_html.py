@@ -86,7 +86,7 @@ def _team_cell(code, name, logo, side, *, winner_side, finished, align) -> str:
 
 def _match_row(m, today) -> str:
     g = m["group_label"]
-    dot = f'<span class="dot" style="background:{GROUP_COLORS.get(g, "#999")}" title="{g}"></span>'
+    grp = f'<span class="grp" title="{g}">{g[-1]}</span>'
     t = _pt(m["kickoff_utc"]).strftime("%-I:%M%p").lower().replace(":00", "")
     ws = _winner_side(m)
     fin = bool(m["is_finished"] and m["home_goals"] is not None)
@@ -95,7 +95,7 @@ def _match_row(m, today) -> str:
     href = m["fifa_match_centre_url"] or m["espn_summary_url"] or "#"
     num = f'#{m["fifa_match_num"]}' if m["fifa_match_num"] else ""
     return (f'<a class="fx" href="{html.escape(href)}" target="_blank">'
-            f'<span class="t">{t}</span>{dot}{home}{_result_cell(m)}{away}'
+            f'<span class="t">{t}</span>{grp}{home}{_result_cell(m)}{away}'
             f'<span class="num">{num}</span></a>')
 
 
@@ -140,7 +140,7 @@ def _sidebar(conn, matches, today) -> str:
     today_html = ""
     if todays:
         rows = "".join(
-            f'<div class="srow"><span class="dot" style="background:{GROUP_COLORS.get(m["group_label"],"#999")}"></span>'
+            f'<div class="srow"><span class="grp">{m["group_label"][-1]}</span>'
             f'{html.escape(m["hc"])} {_result_cell(m)} {html.escape(m["ac"])}</div>'
             for m in todays)
         today_html = f'<section><h3>Today</h3>{rows}</section>'
@@ -186,10 +186,6 @@ def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
             f'{"<span class=now>TODAY</span>" if is_today else ""}</div>'
             + "".join(_match_row(m, today) for m in ms) + '</div>')
 
-    legend = "".join(
-        f'<span class="lg-item"><span class="dot" style="background:{c}"></span>{g[-1]}</span>'
-        for g, c in GROUP_COLORS.items())
-
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <style>{_CSS}</style></head><body>
 <div class="page">
@@ -198,7 +194,7 @@ def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
     <div class="title">Group-Stage Schedule — 72 Matches</div>
     <div class="meta">{played}/72 played · times Pacific · click a match → FIFA match-centre</div>
   </header>
-  <div class="legend">Groups: {legend}<span class="key"><b>bold</b>=winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
+  <div class="legend"><span class="lgrp">A–L = group</span><span class="key"><b>bold</b>=winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
   <div class="body">
     <div class="schedule">{''.join(blocks)}</div>
     {_sidebar(conn, matches, today)}
@@ -232,7 +228,8 @@ header .meta { font-size:9.5px; opacity:.8; }
           background:#f4f6f8; border-bottom:1px solid #e3e7eb; color:#37474f; }
 .legend .lg-item { display:inline-flex; align-items:center; gap:3px; }
 .legend .key { margin-left:auto; color:#607d8b; }
-.dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:0 0 auto; }
+.grp { width:13px; text-align:center; font-weight:700; font-size:9px; color:#455a64; flex:0 0 auto; }
+.lgrp { color:#607d8b; font-weight:700; }
 .body { flex:1; display:flex; gap:12px; padding:8px 16px; overflow:hidden; }
 .schedule { flex:1; column-count:4; column-gap:14px; }
 .sidebar { width:2.25in; flex:0 0 auto; border-left:1px solid #e3e7eb; padding-left:12px; }
