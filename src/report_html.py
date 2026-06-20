@@ -429,6 +429,176 @@ def render_knockout(db_path=DB_PATH, out_path=KNOCKOUT_PATH, *, today=None) -> s
     return str(out_path)
 
 
+# --- Bracket page: FIFA Round-of-32 matchups projected from group standings ----
+# The R32 pairing template (which group position meets which) and the
+# Round-of-16 -> Final tree were reverse-engineered from the static infographic
+# `world-cup-2026.html` (its SVG feeder labels + connector geometry). Per-match
+# date/venue were recovered from the same SVG; the two top-of-bracket matches
+# (M74, M76) render their date off the top edge in the source, so those are blank.
+BRACKET_PATH = REPORT_PATH.with_name("page_bracket.html")
+
+# A feeder is ("W"|"RU", group-letter) or ("3", "A/B/C/D/F") — a best-3rd from one
+# of the listed groups (FIFA assigns which once the eight qualifying thirds are set).
+# (match #, top feeder, bottom feeder, date, venue). Order = top->bottom on the page.
+_R32_LEFT = [
+    (74, ("W", "E"),  ("3", "A/B/C/D/F"), "",       ""),
+    (77, ("W", "I"),  ("3", "C/D/F/G/H"), "Jun 30", "New Jersey"),
+    (73, ("RU", "A"), ("RU", "B"),        "Jun 28", "Los Angeles"),
+    (75, ("W", "F"),  ("RU", "C"),        "Jun 29", "Guadalajara"),
+    (83, ("RU", "K"), ("RU", "L"),        "Jul 2",  "Toronto"),
+    (84, ("W", "H"),  ("RU", "J"),        "Jul 2",  "Los Angeles"),
+    (81, ("W", "D"),  ("3", "B/E/F/I/J"), "Jul 1",  "Santa Clara"),
+    (82, ("W", "G"),  ("3", "A/E/H/I/J"), "Jul 1",  "Seattle"),
+]
+_R32_RIGHT = [
+    (76, ("W", "C"),  ("RU", "F"),        "",       ""),
+    (78, ("RU", "E"), ("RU", "I"),        "Jun 30", "Arlington"),
+    (79, ("W", "A"),  ("3", "C/E/F/H/I"), "Jun 30", "Mexico City"),
+    (80, ("W", "L"),  ("3", "E/H/I/J/K"), "Jul 1",  "Atlanta"),
+    (86, ("W", "J"),  ("RU", "H"),        "Jul 3",  "Miami"),
+    (88, ("RU", "D"), ("RU", "G"),        "Jul 3",  "Arlington"),
+    (85, ("W", "B"),  ("3", "E/F/G/I/J"), "Jul 2",  "Vancouver"),
+    (87, ("W", "K"),  ("3", "D/E/I/J/L"), "Jul 3",  "Kansas City"),
+]
+# Downstream tree: match -> (the two earlier matches whose winners meet here).
+_TREE_R16 = [(89, 74, 77), (90, 73, 75), (93, 83, 84), (94, 81, 82),    # left
+             (91, 76, 78), (92, 79, 80), (95, 86, 88), (96, 85, 87)]    # right
+_TREE_QF  = [(97, 89, 90), (98, 93, 94), (99, 91, 92), (100, 95, 96)]
+_TREE_SF  = [(101, 97, 98), (102, 99, 100)]
+_TREE_FIN = (104, 101, 102)
+
+
+def _bracket_teams(conn) -> dict:
+    """group-letter -> {'W': winner row, 'RU': runner-up row, '3': third row}."""
+    out = {}
+    groups = [r[0] for r in conn.execute(
+        "SELECT DISTINCT group_label FROM standing WHERE group_label IS NOT NULL "
+        "ORDER BY group_label")]
+    for g in groups:
+        rows = load_group_standings(conn, g)
+        out[g[-1]] = {"W":  rows[0] if len(rows) > 0 else None,
+                      "RU": rows[1] if len(rows) > 1 else None,
+                      "3":  rows[2] if len(rows) > 2 else None}
+    return out
+
+
+def _thirds_in_top8(conn) -> set:
+    """Letters of groups whose current 3rd-placed team sits in the top-8 race."""
+    ranked = []
+    for g in [r[0] for r in conn.execute(
+            "SELECT DISTINCT group_label FROM standing WHERE group_label IS NOT NULL")]:
+        rows = load_group_standings(conn, g)
+        if len(rows) >= 3:
+            ranked.append((g[-1], rows[2]))
+    ranked.sort(key=lambda gr: (-(gr[1]["points"] or 0), -(gr[1]["goals_diff"] or 0),
+                                -(gr[1]["goals_for"] or 0)))
+    return {letter for letter, _ in ranked[:8]}
+
+
+def _b_slot(feeder, teams, thirds_in) -> str:
+    kind, key = feeder
+    if kind == "3":
+        chips = "".join(
+            f'<span class="cch">{html.escape(teams[g]["3"]["code"])}</span>'
+            for g in key.split("/")
+            if teams.get(g, {}).get("3") and g in thirds_in)
+        return (f'<div class="bslot tbd"><span class="bteam">3rd place</span>'
+                f'<span class="bset">{html.escape(key)}</span>'
+                f'<span class="cands">{chips}</span></div>')
+    row = teams.get(key, {}).get(kind)
+    lab = ("Winner" if kind == "W" else "2nd") + " " + key
+    if row is None:
+        return (f'<div class="bslot proj"><span class="bteam">—</span>'
+                f'<span class="bset">{lab}</span></div>')
+    if kind == "W":
+        st = "lock" if row["cf"] else "in" if row["ct"] else "proj"
+    else:
+        st = "out" if row["el"] else "in" if row["ct"] else "proj"
+    glyph = {"lock": "✓", "in": "●", "proj": "·", "out": "×"}[st]
+    logo = f'<img class="blg" src="{html.escape(row["logo"])}">' if row["logo"] else ""
+    gd = f'{row["goals_diff"]:+d}' if row["goals_diff"] is not None else ""
+    return (f'<div class="bslot {st}">{logo}'
+            f'<span class="bcode">{html.escape(row["code"])}</span>'
+            f'<span class="bset">{lab}</span>'
+            f'<span class="bpts">{row["points"]}<i>{gd}</i></span>'
+            f'<span class="bglyph">{glyph}</span></div>')
+
+
+def _r32_card(match, teams, thirds_in) -> str:
+    num, top, bot, date, venue = match
+    where = f'{date} · {venue}' if date else 'date TBD'
+    return (f'<div class="bcard"><div class="bch"><b>M{num}</b>'
+            f'<span class="bwhen">{html.escape(where)}</span></div>'
+            f'{_b_slot(top, teams, thirds_in)}{_b_slot(bot, teams, thirds_in)}</div>')
+
+
+def _funnel_chip(num, a, b, *, prefix="W") -> str:
+    return (f'<span class="fch"><b>M{num}</b>'
+            f'<span class="ff">{prefix}{a}·{prefix}{b}</span></span>')
+
+
+def _funnel() -> str:
+    r16l = "".join(_funnel_chip(n, a, b) for n, a, b in _TREE_R16[:4])
+    r16r = "".join(_funnel_chip(n, a, b) for n, a, b in _TREE_R16[4:])
+    qf = "".join(_funnel_chip(n, a, b) for n, a, b in _TREE_QF)
+    sf = "".join(_funnel_chip(n, a, b) for n, a, b in _TREE_SF)
+    fn, fa, fb = _TREE_FIN
+    return f"""
+      <div class="frow"><span class="flab">Round of 16 · Jul 4–7</span>
+        <div class="fchips">{r16l}</div><div class="fchips">{r16r}</div></div>
+      <div class="frow"><span class="flab">Quarter-finals · Jul 9–11</span>
+        <div class="fchips">{qf}</div></div>
+      <div class="frow"><span class="flab">Semi-finals · Jul 14–15</span>
+        <div class="fchips">{sf}</div></div>
+      <div class="frow"><span class="flab">3rd place · Jul 18 · Miami</span>
+        <div class="fchips">{_funnel_chip(103, 101, 102, prefix="L")}</div></div>
+      <div class="frow fin"><span class="flab">FINAL · Jul 19 · New Jersey</span>
+        <div class="fchips">{_funnel_chip(fn, fa, fb)}</div></div>"""
+
+
+def build_bracket_page(conn: sqlite3.Connection, today=None) -> str:
+    if today is None:
+        today = datetime.now(CUTOFF_TZ).date()
+    teams = _bracket_teams(conn)
+    thirds_in = _thirds_in_top8(conn)
+    left = "".join(_r32_card(m, teams, thirds_in) for m in _R32_LEFT)
+    right = "".join(_r32_card(m, teams, thirds_in) for m in _R32_RIGHT)
+    played = conn.execute("SELECT COUNT(*) FROM fixture WHERE is_finished=1").fetchone()[0]
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<style>{_CSS}{_BRACKET_CSS}</style></head><body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
+    <div class="title">Knockout Bracket — Projected Round of 32</div>
+    <div class="meta">{played}/72 played · slots fill as groups clinch</div>
+  </header>
+  <div class="blegend">
+    <span><span class="g lock">✓</span> won group</span>
+    <span><span class="g in">●</span> through (top 2)</span>
+    <span><span class="g proj">·</span> projected</span>
+    <span><span class="g out">×</span> out of top 2</span>
+    <span class="bk">3rd-place slots assigned by FIFA once the 8 best 3rds are known · chips = current top-8 thirds</span>
+  </div>
+  <div class="bbody">
+    <div class="bcol">{left}</div>
+    <div class="bfunnel">{_funnel()}</div>
+    <div class="bcol">{right}</div>
+  </div>
+  <footer>R32 template &amp; tree from world-cup-2026.html · teams from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
+</div></body></html>"""
+
+
+def render_bracket(db_path=DB_PATH, out_path=BRACKET_PATH, *, today=None) -> str:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(build_bracket_page(conn, today))
+    finally:
+        conn.close()
+    return str(out_path)
+
+
 _CSS = """
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color:#1a1a1a; }
@@ -551,7 +721,63 @@ _KNOCKOUT_CSS = """
 """
 
 
+# Bracket page CSS (R32 cards left/right + central round funnel).
+_BRACKET_CSS = """
+.blegend { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:4px 16px;
+           background:#f4f6f8; border-bottom:1px solid #e3e7eb; color:#37474f; font-size:9px; }
+.blegend .g { display:inline-block; width:14px; text-align:center; font-weight:800; }
+.blegend .g.lock { color:#9a7b15; } .blegend .g.in { color:#2E7D32; }
+.blegend .g.proj { color:#90A4AE; } .blegend .g.out { color:#c0504d; }
+.blegend .bk { margin-left:auto; color:#78909c; }
+.bbody { flex:1; display:flex; gap:10px; padding:7px 14px; overflow:hidden; }
+.bcol { width:2.95in; flex:0 0 auto; display:flex; flex-direction:column; justify-content:space-between; }
+.bcard { border:1px solid #e3e7eb; border-radius:5px; overflow:hidden; background:#fff;
+         box-shadow:0 1px 1px rgba(0,0,0,.03); }
+.bch { display:flex; justify-content:space-between; align-items:center; background:#f1f4f7;
+       padding:1px 6px; font-size:8px; color:#607d8b; border-bottom:1px solid #eceff1; }
+.bch b { color:""" + NAVY + """; font-size:9px; }
+.bslot { display:flex; align-items:center; gap:5px; padding:2.5px 6px; font-size:11px;
+         border-bottom:1px solid #f4f6f8; }
+.bslot:last-child { border-bottom:none; }
+.bslot .blg { width:15px; height:15px; object-fit:contain; flex:0 0 auto; }
+.bslot .bcode { font-weight:800; width:34px; flex:0 0 auto; }
+.bslot .bset { color:#90a4ae; font-size:8.5px; flex:1; white-space:nowrap;
+               overflow:hidden; text-overflow:ellipsis; }
+.bslot .bpts { font-size:9px; color:#546e7a; flex:0 0 auto; }
+.bslot .bpts i { color:#b0bec5; font-style:normal; margin-left:2px; }
+.bslot .bglyph { width:13px; text-align:center; font-weight:800; flex:0 0 auto; }
+.bslot.lock { background:#FFFBEF; } .bslot.lock .bglyph { color:#9a7b15; }
+.bslot.in { background:#F3FAF4; } .bslot.in .bglyph { color:#2E7D32; }
+.bslot.proj .bglyph { color:#b0bec5; }
+.bslot.out .bcode, .bslot.out .bset { color:#b0a0a0; } .bslot.out .bglyph { color:#c0504d; }
+.bslot.tbd { background:#fafbfc; }
+.bslot.tbd .bteam { font-weight:700; color:#78909c; width:auto; flex:0 0 auto; }
+.bslot.tbd .bset { flex:0 0 auto; color:#9aa7b0; font-weight:700; letter-spacing:.3px; }
+.bslot.tbd .cands { display:flex; gap:2px; margin-left:auto; flex:0 0 auto; }
+.bslot.tbd .cch { font-size:8px; font-weight:700; color:#2E7D32; background:#E8F5E9;
+                  border-radius:6px; padding:0 4px; }
+.bfunnel { flex:1; display:flex; flex-direction:column; justify-content:center; gap:16px;
+           padding:6px 6px; min-width:0; position:relative; }
+.bfunnel::before { content:""; position:absolute; top:8%; bottom:8%; left:50%; width:2px;
+                   transform:translateX(-50%); background:linear-gradient(#e3e7eb,#e9e2c4); z-index:0; }
+.frow { text-align:center; position:relative; z-index:1; }
+.frow .flab { display:block; font-size:9.5px; font-weight:800; color:""" + NAVY + """;
+              text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+.frow.fin .flab { color:#b8860b; font-size:11px; }
+.fchips { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:3px; }
+.fch { display:inline-flex; flex-direction:column; align-items:center; line-height:1.18;
+       border:1px solid #dfe3e8; border-radius:5px; padding:3px 9px; background:#fff;
+       box-shadow:0 1px 1px rgba(0,0,0,.03); min-width:52px; }
+.fch b { font-size:9.5px; color:""" + NAVY + """; }
+.fch .ff { font-size:7.5px; color:#9aa7b0; }
+.frow.fin .fch { border-color:""" + GOLD + """; background:#FFFBEF; padding:6px 16px; }
+.frow.fin .fch b { font-size:12px; color:#b8860b; }
+.frow.fin .fch .ff { font-size:8.5px; }
+"""
+
+
 if __name__ == "__main__":
     print("wrote", render())            # page 3 — matches
     print("wrote", render_groups())     # groups — standings + schedule
     print("wrote", render_knockout())   # knockout — calendar + qualifiers
+    print("wrote", render_bracket())    # bracket — projected Round of 32

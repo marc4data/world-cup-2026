@@ -42,6 +42,20 @@ def test_groups_page_empty_and_seeded(conn, teams):
     assert "ALP" in out or "Alpha" in out
 
 
+def test_bracket_page_empty_and_seeded(conn, teams):
+    empty = report_html.build_bracket_page(conn, today=date(2026, 6, 20))
+    assert '<div class="page">' in empty                 # graceful on no standings
+    assert "Round of 32" in empty
+    assert "M104" in empty and "FINAL" in empty           # funnel/tree rendered
+    db.upsert(conn, "standing", [{
+        "season": 2026, "league_id": 1, "group_label": "Group A", "team_id": 1,
+        "rank": 1, "played": 1, "win": 1, "draw": 0, "lose": 0, "goals_for": 2,
+        "goals_against": 0, "goals_diff": 2, "points": 3}],
+        ["season", "league_id", "group_label", "team_id"])
+    out = report_html.build_bracket_page(conn, today=date(2026, 6, 20))
+    assert "ALP" in out or "Alpha" in out                 # group A winner resolved into a slot
+
+
 def test_knockout_page_builds(conn):
     out = report_html.build_knockout_page(conn, today=date(2026, 6, 20))
     assert '<div class="page">' in out

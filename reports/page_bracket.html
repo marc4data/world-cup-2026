@@ -1,0 +1,142 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color:#1a1a1a; }
+.page { width:11in; height:8.5in; background:#fff; padding:0; display:flex; flex-direction:column; overflow:hidden; }
+header { background:#0B1F3A; color:#fff; display:flex; align-items:center; gap:14px; padding:9px 16px; }
+header .brand { font-weight:800; letter-spacing:.5px; font-size:13px; }
+header .brand .logo { color:#C9A227; }
+header .brand .sub { font-weight:500; opacity:.7; font-size:9px; letter-spacing:1px; margin-left:4px; }
+header .title { font-size:15px; font-weight:700; flex:1; text-align:center; }
+header .meta { font-size:9.5px; opacity:.8; }
+.legend { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:5px 16px; font-size:9.5px;
+          background:#f4f6f8; border-bottom:1px solid #e3e7eb; color:#37474f; }
+.legend .lg-item { display:inline-flex; align-items:center; gap:3px; }
+.legend .key { margin-left:auto; color:#607d8b; }
+.legend .kpick { border:1.3px solid #455a64; border-radius:3px; padding:0 3px; font-weight:700; color:#37474f; }
+.grp { width:13px; text-align:center; font-weight:700; font-size:9px; color:#455a64; flex:0 0 auto; }
+.lgrp { color:#607d8b; font-weight:700; }
+.body { flex:1; display:flex; gap:12px; padding:8px 16px; overflow:hidden; }
+.schedule { flex:1; column-count:4; column-gap:14px; }
+.sidebar { width:2.25in; flex:0 0 auto; border-left:1px solid #e3e7eb; padding-left:12px; }
+.sidebar section { margin-bottom:13px; }
+.sidebar h3 { font-size:10.5px; color:#0B1F3A; border-bottom:2px solid #C9A227;
+              padding-bottom:2px; margin-bottom:6px; text-transform:uppercase; letter-spacing:.6px; }
+.qrow { margin-bottom:7px; }
+.qlab { display:block; font-size:9px; font-weight:800; margin-bottom:3px; text-transform:uppercase; letter-spacing:.3px; }
+.qlab.won { color:#9a7b15; } .qlab.thr { color:#2E7D32; } .qlab.out { color:#90A4AE; }
+.chip { display:inline-block; font-size:9px; padding:1px 6px; border-radius:9px; margin:0 3px 3px 0; }
+.chip.won { background:#FFF3CD; color:#7a5c00; } .chip.thr { background:#E8F5E9; color:#1B5E20; }
+.chip.out { background:#ECEFF1; color:#607D8B; } .chip.none { color:#b0bec5; }
+.srow { font-size:10px; display:flex; align-items:center; gap:5px; padding:1px 0; }
+.srow .score, .srow .proj, .srow .vs { width:auto; }
+.note { font-size:7.5px; color:#90a4ae; margin-top:5px; line-height:1.35; }
+.brow { display:flex; align-items:center; gap:6px; font-size:10px; padding:2px 0; border-bottom:1px solid #f0f2f4; }
+.brow .bg { width:16px; text-align:center; font-weight:800; color:#9a7b15; font-size:12px; flex:0 0 auto; }
+.brow .bn { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.brow .bt { color:#78909c; font-size:9px; flex:0 0 auto; }
+.brow .ba { color:#43a047; font-size:8px; flex:0 0 auto; }
+.brow.none { color:#b0bec5; font-style:italic; }
+.day { break-inside:avoid; margin-bottom:10px; }
+.day.today { background:#FFF8E1; border-radius:5px; padding:3px 4px; margin:-3px -4px 9px; }
+.dh { font-size:10px; font-weight:800; color:#0B1F3A; border-bottom:2px solid #C9A227;
+      padding-bottom:2px; margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; }
+.dh .now { background:#C9A227; color:#000; font-size:7.5px; font-weight:800; padding:1px 4px; border-radius:3px; }
+.fx { display:flex; align-items:center; gap:3px; font-size:10.5px; padding:2.5px 1px; text-decoration:none;
+      color:inherit; border-bottom:1px solid #f0f2f4; }
+.fx:hover { background:#eef4fb; }
+.fx .t { width:34px; color:#78909c; font-size:9.5px; flex:0 0 auto; white-space:nowrap; }
+.fx .team { flex:1; display:inline-flex; align-items:center; overflow:hidden; white-space:nowrap; }
+.fx .team.home { justify-content:flex-end; }
+.fx .team.away { justify-content:flex-start; }
+.fx .pick { display:inline-flex; align-items:center; gap:3px; border:1.3px solid transparent; padding:0 2px; border-radius:3px; }
+.fx .team.win .pick { border-color:#2E7D32; color:#1B5E20; font-weight:700; background:#F1F8F1; }
+.fx .team.fav .pick { border-color:#0D47A1; color:#0D47A1; font-weight:700; background:#F0F5FC; }
+.fx .lg { width:14px; height:14px; object-fit:contain; }
+.fx .score { width:40px; text-align:center; font-weight:800; flex:0 0 auto; }
+.fx .proj { width:40px; text-align:center; color:#0D47A1; font-size:9px; flex:0 0 auto; }
+.fx .vs { width:40px; text-align:center; color:#b0bec5; flex:0 0 auto; }
+.fx .num { width:22px; text-align:right; color:#b0bec5; font-size:8px; flex:0 0 auto; }
+footer { font-size:8px; color:#90a4ae; padding:3px 16px; border-top:1px solid #eceff1; text-align:right; }
+
+.blegend { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:4px 16px;
+           background:#f4f6f8; border-bottom:1px solid #e3e7eb; color:#37474f; font-size:9px; }
+.blegend .g { display:inline-block; width:14px; text-align:center; font-weight:800; }
+.blegend .g.lock { color:#9a7b15; } .blegend .g.in { color:#2E7D32; }
+.blegend .g.proj { color:#90A4AE; } .blegend .g.out { color:#c0504d; }
+.blegend .bk { margin-left:auto; color:#78909c; }
+.bbody { flex:1; display:flex; gap:10px; padding:7px 14px; overflow:hidden; }
+.bcol { width:2.95in; flex:0 0 auto; display:flex; flex-direction:column; justify-content:space-between; }
+.bcard { border:1px solid #e3e7eb; border-radius:5px; overflow:hidden; background:#fff;
+         box-shadow:0 1px 1px rgba(0,0,0,.03); }
+.bch { display:flex; justify-content:space-between; align-items:center; background:#f1f4f7;
+       padding:1px 6px; font-size:8px; color:#607d8b; border-bottom:1px solid #eceff1; }
+.bch b { color:#0B1F3A; font-size:9px; }
+.bslot { display:flex; align-items:center; gap:5px; padding:2.5px 6px; font-size:11px;
+         border-bottom:1px solid #f4f6f8; }
+.bslot:last-child { border-bottom:none; }
+.bslot .blg { width:15px; height:15px; object-fit:contain; flex:0 0 auto; }
+.bslot .bcode { font-weight:800; width:34px; flex:0 0 auto; }
+.bslot .bset { color:#90a4ae; font-size:8.5px; flex:1; white-space:nowrap;
+               overflow:hidden; text-overflow:ellipsis; }
+.bslot .bpts { font-size:9px; color:#546e7a; flex:0 0 auto; }
+.bslot .bpts i { color:#b0bec5; font-style:normal; margin-left:2px; }
+.bslot .bglyph { width:13px; text-align:center; font-weight:800; flex:0 0 auto; }
+.bslot.lock { background:#FFFBEF; } .bslot.lock .bglyph { color:#9a7b15; }
+.bslot.in { background:#F3FAF4; } .bslot.in .bglyph { color:#2E7D32; }
+.bslot.proj .bglyph { color:#b0bec5; }
+.bslot.out .bcode, .bslot.out .bset { color:#b0a0a0; } .bslot.out .bglyph { color:#c0504d; }
+.bslot.tbd { background:#fafbfc; }
+.bslot.tbd .bteam { font-weight:700; color:#78909c; width:auto; flex:0 0 auto; }
+.bslot.tbd .bset { flex:0 0 auto; color:#9aa7b0; font-weight:700; letter-spacing:.3px; }
+.bslot.tbd .cands { display:flex; gap:2px; margin-left:auto; flex:0 0 auto; }
+.bslot.tbd .cch { font-size:8px; font-weight:700; color:#2E7D32; background:#E8F5E9;
+                  border-radius:6px; padding:0 4px; }
+.bfunnel { flex:1; display:flex; flex-direction:column; justify-content:center; gap:16px;
+           padding:6px 6px; min-width:0; position:relative; }
+.bfunnel::before { content:""; position:absolute; top:8%; bottom:8%; left:50%; width:2px;
+                   transform:translateX(-50%); background:linear-gradient(#e3e7eb,#e9e2c4); z-index:0; }
+.frow { text-align:center; position:relative; z-index:1; }
+.frow .flab { display:block; font-size:9.5px; font-weight:800; color:#0B1F3A;
+              text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+.frow.fin .flab { color:#b8860b; font-size:11px; }
+.fchips { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:3px; }
+.fch { display:inline-flex; flex-direction:column; align-items:center; line-height:1.18;
+       border:1px solid #dfe3e8; border-radius:5px; padding:3px 9px; background:#fff;
+       box-shadow:0 1px 1px rgba(0,0,0,.03); min-width:52px; }
+.fch b { font-size:9.5px; color:#0B1F3A; }
+.fch .ff { font-size:7.5px; color:#9aa7b0; }
+.frow.fin .fch { border-color:#C9A227; background:#FFFBEF; padding:6px 16px; }
+.frow.fin .fch b { font-size:12px; color:#b8860b; }
+.frow.fin .fch .ff { font-size:8.5px; }
+</style></head><body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
+    <div class="title">Knockout Bracket — Projected Round of 32</div>
+    <div class="meta">32/72 played · slots fill as groups clinch</div>
+  </header>
+  <div class="blegend">
+    <span><span class="g lock">✓</span> won group</span>
+    <span><span class="g in">●</span> through (top 2)</span>
+    <span><span class="g proj">·</span> projected</span>
+    <span><span class="g out">×</span> out of top 2</span>
+    <span class="bk">3rd-place slots assigned by FIFA once the 8 best 3rds are known · chips = current top-8 thirds</span>
+  </div>
+  <div class="bbody">
+    <div class="bcol"><div class="bcard"><div class="bch"><b>M74</b><span class="bwhen">date TBD</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/25.png"><span class="bcode">GER</span><span class="bset">Winner E</span><span class="bpts">3<i>+6</i></span><span class="bglyph">·</span></div><div class="bslot tbd"><span class="bteam">3rd place</span><span class="bset">A/B/C/D/F</span><span class="cands"><span class="cch">CZE</span><span class="cch">BIH</span><span class="cch">SCO</span><span class="cch">PAR</span><span class="cch">NED</span></span></div></div><div class="bcard"><div class="bch"><b>M77</b><span class="bwhen">Jun 30 · New Jersey</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/1090.png"><span class="bcode">NOR</span><span class="bset">Winner I</span><span class="bpts">3<i>+3</i></span><span class="bglyph">·</span></div><div class="bslot tbd"><span class="bteam">3rd place</span><span class="bset">C/D/F/G/H</span><span class="cands"><span class="cch">SCO</span><span class="cch">PAR</span><span class="cch">NED</span><span class="cch">BEL</span><span class="cch">ESP</span></span></div></div><div class="bcard"><div class="bch"><b>M73</b><span class="bwhen">Jun 28 · Los Angeles</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/17.png"><span class="bcode">KOR</span><span class="bset">2nd A</span><span class="bpts">3<i>+0</i></span><span class="bglyph">·</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/15.png"><span class="bcode">SUI</span><span class="bset">2nd B</span><span class="bpts">4<i>+3</i></span><span class="bglyph">·</span></div></div><div class="bcard"><div class="bch"><b>M75</b><span class="bwhen">Jun 29 · Guadalajara</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/5.png"><span class="bcode">SWE</span><span class="bset">Winner F</span><span class="bpts">3<i>+4</i></span><span class="bglyph">·</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/31.png"><span class="bcode">MAR</span><span class="bset">2nd C</span><span class="bpts">4<i>+1</i></span><span class="bglyph">·</span></div></div><div class="bcard"><div class="bch"><b>M83</b><span class="bwhen">Jul 2 · Toronto</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/1508.png"><span class="bcode">CGO</span><span class="bset">2nd K</span><span class="bpts">1<i>+0</i></span><span class="bglyph">·</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/1504.png"><span class="bcode">GHA</span><span class="bset">2nd L</span><span class="bpts">3<i>+1</i></span><span class="bglyph">·</span></div></div><div class="bcard"><div class="bch"><b>M84</b><span class="bwhen">Jul 2 · Los Angeles</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/7.png"><span class="bcode">URU</span><span class="bset">Winner H</span><span class="bpts">1<i>+0</i></span><span class="bglyph">·</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/775.png"><span class="bcode">AUT</span><span class="bset">2nd J</span><span class="bpts">3<i>+2</i></span><span class="bglyph">·</span></div></div><div class="bcard"><div class="bch"><b>M81</b><span class="bwhen">Jul 1 · Santa Clara</span></div><div class="bslot in"><img class="blg" src="https://media.api-sports.io/football/teams/2384.png"><span class="bcode">USA</span><span class="bset">Winner D</span><span class="bpts">6<i>+5</i></span><span class="bglyph">●</span></div><div class="bslot tbd"><span class="bteam">3rd place</span><span class="bset">B/E/F/I/J</span><span class="cands"><span class="cch">BIH</span><span class="cch">NED</span></span></div></div><div class="bcard"><div class="bch"><b>M82</b><span class="bwhen">Jul 1 · Seattle</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/4673.png"><span class="bcode">NZL</span><span class="bset">Winner G</span><span class="bpts">1<i>+0</i></span><span class="bglyph">·</span></div><div class="bslot tbd"><span class="bteam">3rd place</span><span class="bset">A/E/H/I/J</span><span class="cands"><span class="cch">CZE</span><span class="cch">ESP</span></span></div></div></div>
+    <div class="bfunnel">
+      <div class="frow"><span class="flab">Round of 16 · Jul 4–7</span>
+        <div class="fchips"><span class="fch"><b>M89</b><span class="ff">W74·W77</span></span><span class="fch"><b>M90</b><span class="ff">W73·W75</span></span><span class="fch"><b>M93</b><span class="ff">W83·W84</span></span><span class="fch"><b>M94</b><span class="ff">W81·W82</span></span></div><div class="fchips"><span class="fch"><b>M91</b><span class="ff">W76·W78</span></span><span class="fch"><b>M92</b><span class="ff">W79·W80</span></span><span class="fch"><b>M95</b><span class="ff">W86·W88</span></span><span class="fch"><b>M96</b><span class="ff">W85·W87</span></span></div></div>
+      <div class="frow"><span class="flab">Quarter-finals · Jul 9–11</span>
+        <div class="fchips"><span class="fch"><b>M97</b><span class="ff">W89·W90</span></span><span class="fch"><b>M98</b><span class="ff">W93·W94</span></span><span class="fch"><b>M99</b><span class="ff">W91·W92</span></span><span class="fch"><b>M100</b><span class="ff">W95·W96</span></span></div></div>
+      <div class="frow"><span class="flab">Semi-finals · Jul 14–15</span>
+        <div class="fchips"><span class="fch"><b>M101</b><span class="ff">W97·W98</span></span><span class="fch"><b>M102</b><span class="ff">W99·W100</span></span></div></div>
+      <div class="frow"><span class="flab">3rd place · Jul 18 · Miami</span>
+        <div class="fchips"><span class="fch"><b>M103</b><span class="ff">L101·L102</span></span></div></div>
+      <div class="frow fin"><span class="flab">FINAL · Jul 19 · New Jersey</span>
+        <div class="fchips"><span class="fch"><b>M104</b><span class="ff">W101·W102</span></span></div></div></div>
+    <div class="bcol"><div class="bcard"><div class="bch"><b>M76</b><span class="bwhen">date TBD</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/6.png"><span class="bcode">BRA</span><span class="bset">Winner C</span><span class="bpts">4<i>+3</i></span><span class="bglyph">·</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/12.png"><span class="bcode">JPN</span><span class="bset">2nd F</span><span class="bpts">1<i>+0</i></span><span class="bglyph">·</span></div></div><div class="bcard"><div class="bch"><b>M78</b><span class="bwhen">Jun 30 · Arlington</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/1501.png"><span class="bcode">CIV</span><span class="bset">2nd E</span><span class="bpts">3<i>+1</i></span><span class="bglyph">·</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/2.png"><span class="bcode">FRA</span><span class="bset">2nd I</span><span class="bpts">3<i>+2</i></span><span class="bglyph">·</span></div></div><div class="bcard"><div class="bch"><b>M79</b><span class="bwhen">Jun 30 · Mexico City</span></div><div class="bslot in"><img class="blg" src="https://media.api-sports.io/football/teams/16.png"><span class="bcode">MEX</span><span class="bset">Winner A</span><span class="bpts">6<i>+3</i></span><span class="bglyph">●</span></div><div class="bslot tbd"><span class="bteam">3rd place</span><span class="bset">C/E/F/H/I</span><span class="cands"><span class="cch">SCO</span><span class="cch">NED</span><span class="cch">ESP</span></span></div></div><div class="bcard"><div class="bch"><b>M80</b><span class="bwhen">Jul 1 · Atlanta</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/10.png"><span class="bcode">ENG</span><span class="bset">Winner L</span><span class="bpts">3<i>+2</i></span><span class="bglyph">·</span></div><div class="bslot tbd"><span class="bteam">3rd place</span><span class="bset">E/H/I/J/K</span><span class="cands"><span class="cch">ESP</span><span class="cch">POR</span></span></div></div><div class="bcard"><div class="bch"><b>M86</b><span class="bwhen">Jul 3 · Miami</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/26.png"><span class="bcode">ARG</span><span class="bset">Winner J</span><span class="bpts">3<i>+3</i></span><span class="bglyph">·</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/23.png"><span class="bcode">KSA</span><span class="bset">2nd H</span><span class="bpts">1<i>+0</i></span><span class="bglyph">·</span></div></div><div class="bcard"><div class="bch"><b>M88</b><span class="bwhen">Jul 3 · Arlington</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/20.png"><span class="bcode">AUS</span><span class="bset">2nd D</span><span class="bpts">3<i>+0</i></span><span class="bglyph">·</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/22.png"><span class="bcode">IRN</span><span class="bset">2nd G</span><span class="bpts">1<i>+0</i></span><span class="bglyph">·</span></div></div><div class="bcard"><div class="bch"><b>M85</b><span class="bwhen">Jul 2 · Vancouver</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/5529.png"><span class="bcode">CAN</span><span class="bset">Winner B</span><span class="bpts">4<i>+6</i></span><span class="bglyph">·</span></div><div class="bslot tbd"><span class="bteam">3rd place</span><span class="bset">E/F/G/I/J</span><span class="cands"><span class="cch">NED</span><span class="cch">BEL</span></span></div></div><div class="bcard"><div class="bch"><b>M87</b><span class="bwhen">Jul 3 · Kansas City</span></div><div class="bslot proj"><img class="blg" src="https://media.api-sports.io/football/teams/8.png"><span class="bcode">COL</span><span class="bset">Winner K</span><span class="bpts">3<i>+2</i></span><span class="bglyph">·</span></div><div class="bslot tbd"><span class="bteam">3rd place</span><span class="bset">D/E/I/J/L</span><span class="cands"><span class="cch">PAR</span></span></div></div></div>
+  </div>
+  <footer>R32 template &amp; tree from world-cup-2026.html · teams from worldcup.db · 2026-06-20 15:57 PT</footer>
+</div></body></html>
