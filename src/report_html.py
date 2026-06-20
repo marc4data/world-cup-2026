@@ -166,25 +166,29 @@ def _sidebar(conn, matches, today) -> str:
     </aside>"""
 
 
+def _day_blocks(matches, today) -> str:
+    """Schedule day blocks (shared by the matches and groups pages)."""
+    days: dict[str, list] = {}
+    for m in matches:
+        days.setdefault(_pt(m["kickoff_utc"]).date().isoformat(), []).append(m)
+    out = []
+    for d, ms in sorted(days.items()):
+        dt = datetime.fromisoformat(d).date()
+        is_today = dt == today
+        out.append(
+            f'<div class="day{" today" if is_today else ""}">'
+            f'<div class="dh">{dt.strftime("%a %b %-d")}'
+            f'{"<span class=now>TODAY</span>" if is_today else ""}</div>'
+            + "".join(_match_row(m, today) for m in ms) + '</div>')
+    return "".join(out)
+
+
 def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
     if today is None:
         today = datetime.now(CUTOFF_TZ).date()
     matches = load_matches(conn)
     played = sum(1 for m in matches if m["is_finished"])
-
-    days: dict[str, list] = {}
-    for m in matches:
-        days.setdefault(_pt(m["kickoff_utc"]).date().isoformat(), []).append(m)
-
-    blocks = []
-    for d, ms in sorted(days.items()):
-        dt = datetime.fromisoformat(d).date()
-        is_today = dt == today
-        blocks.append(
-            f'<div class="day{" today" if is_today else ""}">'
-            f'<div class="dh">{dt.strftime("%a %b %-d")}'
-            f'{"<span class=now>TODAY</span>" if is_today else ""}</div>'
-            + "".join(_match_row(m, today) for m in ms) + '</div>')
+    blocks = _day_blocks(matches, today)
 
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <style>{_CSS}</style></head><body>
@@ -196,7 +200,7 @@ def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
   </header>
   <div class="legend"><span class="lgrp">A–L = group</span><span class="key"><b>bold</b>=winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
   <div class="body">
-    <div class="schedule">{''.join(blocks)}</div>
+    <div class="schedule">{blocks}</div>
     {_sidebar(conn, matches, today)}
   </div>
   <footer>Generated from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
@@ -209,6 +213,82 @@ def render(db_path=DB_PATH, out_path=REPORT_PATH, *, today=None) -> str:
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(build_matches_page(conn, today))
+    finally:
+        conn.close()
+    return str(out_path)
+
+
+# --- Groups page: standings tables (left) + schedule (right) ----------------
+GROUPS_PATH = REPORT_PATH.with_name("page_groups.html")
+_STAND_COLS = ["#", "Team", "P", "W", "D", "L", "GF", "GA", "GD", "Pts"]
+
+
+def load_group_standings(conn, group):
+    return conn.execute(
+        """SELECT COALESCE(s.rank_fifa, s.rank) AS pos,
+                  COALESCE(NULLIF(t.code,''), substr(upper(t.name),1,3)) AS code, t.logo,
+                  s.played, s.win, s.draw, s.lose, s.goals_for, s.goals_against,
+                  s.goals_diff, s.points,
+                  q.clinched_first AS cf, q.clinched_top2 AS ct, q.eliminated_top2 AS el
+           FROM standing s JOIN team t ON t.team_id = s.team_id
+           LEFT JOIN group_qualification q
+             ON q.team_id=s.team_id AND q.group_label=s.group_label
+            AND q.season=s.season AND q.league_id=s.league_id
+           WHERE s.group_label=? ORDER BY COALESCE(s.rank_fifa, s.rank)""",
+        (group,)).fetchall()
+
+
+def _standings_table(group, rows) -> str:
+    body = []
+    for i, r in enumerate(rows):
+        cls = (["qz"] if i < 2 else []) + (["won"] if r["cf"] else ["elim"] if r["el"] else [])
+        logo = f'<img class="lg" src="{html.escape(r["logo"])}">' if r["logo"] else ""
+        gd = f'{r["goals_diff"]:+d}' if r["goals_diff"] is not None else ""
+        body.append(
+            f'<tr class="{" ".join(cls)}"><td>{r["pos"]}</td>'
+            f'<td class="tm"><span class="tw">{logo}{html.escape(r["code"])}</span></td>'
+            f'<td>{r["played"]}</td><td>{r["win"]}</td><td>{r["draw"]}</td><td>{r["lose"]}</td>'
+            f'<td>{r["goals_for"]}</td><td>{r["goals_against"]}</td>'
+            f'<td>{gd}</td><td class="pts">{r["points"]}</td></tr>')
+    head = "".join(f"<th>{c}</th>" for c in _STAND_COLS)
+    return (f'<table class="gt"><caption>{group[-1]}</caption>'
+            f'<thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table>')
+
+
+def build_groups_page(conn: sqlite3.Connection, today=None) -> str:
+    if today is None:
+        today = datetime.now(CUTOFF_TZ).date()
+    matches = load_matches(conn)
+    played = sum(1 for m in matches if m["is_finished"])
+    groups = [r[0] for r in conn.execute(
+        "SELECT DISTINCT group_label FROM standing WHERE group_label IS NOT NULL "
+        "ORDER BY group_label")]
+    tables = "".join(_standings_table(g, load_group_standings(conn, g)) for g in groups)
+    blocks = _day_blocks(matches, today)
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<style>{_CSS}{_GROUPS_CSS}</style></head><body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
+    <div class="title">Groups — Standings &amp; Schedule</div>
+    <div class="meta">{played}/72 played · top 2 advance (+ 8 best 3rd) · times Pacific</div>
+  </header>
+  <div class="legend"><span class="lgrp">green = top-2 zone · gold = won group · grey = out of top 2</span>
+    <span class="key"><b>bold</b>=winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
+  <div class="gbody">
+    <div class="gtables">{tables}</div>
+    <div class="gsched">{blocks}</div>
+  </div>
+  <footer>Generated from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
+</div></body></html>"""
+
+
+def render_groups(db_path=DB_PATH, out_path=GROUPS_PATH, *, today=None) -> str:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(build_groups_page(conn, today))
     finally:
         conn.close()
     return str(out_path)
@@ -273,6 +353,28 @@ header .meta { font-size:9.5px; opacity:.8; }
 footer { font-size:8px; color:#90a4ae; padding:3px 16px; border-top:1px solid #eceff1; text-align:right; }
 """
 
+# Extra CSS for the Groups page (standings tables left, schedule right).
+_GROUPS_CSS = """
+.gbody { flex:1; display:flex; gap:14px; padding:8px 16px; overflow:hidden; }
+.gtables { width:4.75in; flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr;
+           gap:8px 14px; align-content:start; }
+.gsched { flex:1; column-count:3; column-gap:12px; }
+.gt { width:100%; border-collapse:collapse; font-size:8px; }
+.gt caption { text-align:left; font-weight:800; font-size:10.5px; color:""" + NAVY + """;
+              border-bottom:2px solid """ + GOLD + """; padding-bottom:1px; margin-bottom:2px; }
+.gt th { background:#37474F; color:#fff; font-weight:700; padding:1px 2px; text-align:center; font-size:7px; }
+.gt th:nth-child(2) { text-align:left; }
+.gt td { padding:1.5px 2px; text-align:center; border-bottom:1px solid #eceff1; }
+.gt td.tm { text-align:left; }
+.gt td.tm .tw { display:inline-flex; align-items:center; gap:3px; font-weight:600; }
+.gt td.tm .lg { width:12px; height:12px; object-fit:contain; }
+.gt td.pts { font-weight:800; }
+.gt tr.qz td { background:#E8F5E9; }
+.gt tr.won td { background:#FFF6D6; }
+.gt tr.elim td { color:#9aa7b0; }
+"""
+
 
 if __name__ == "__main__":
-    print("wrote", render())
+    print("wrote", render())          # page 3 — matches
+    print("wrote", render_groups())   # new — groups standings + schedule

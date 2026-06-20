@@ -27,3 +27,16 @@ def test_renders_a_seeded_group_match(conn, teams):
     assert "2–0" in out                       # finished score rendered
     assert "https://www.fifa.com/x" in out    # deep link wired in
     assert "Alpha" in out or "ALP" in out      # team present
+
+
+def test_groups_page_empty_and_seeded(conn, teams):
+    empty = report_html.build_groups_page(conn, today=date(2026, 6, 20))
+    assert '<div class="page">' in empty and "Standings" in empty  # graceful on no data
+    db.upsert(conn, "standing", [{
+        "season": 2026, "league_id": 1, "group_label": "Group A", "team_id": 1,
+        "rank": 1, "played": 1, "win": 1, "draw": 0, "lose": 0, "goals_for": 2,
+        "goals_against": 0, "goals_diff": 2, "points": 3}],
+        ["season", "league_id", "group_label", "team_id"])
+    out = report_html.build_groups_page(conn, today=date(2026, 6, 20))
+    assert '<table class="gt">' in out          # a standings table rendered
+    assert "ALP" in out or "Alpha" in out
