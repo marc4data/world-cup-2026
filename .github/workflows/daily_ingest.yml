@@ -58,15 +58,27 @@ jobs:
       - name: Refresh Excel export
         run: python src/export_excel.py
 
+      - name: Refresh report notebooks + figures
+        # Non-fatal: a notebook hiccup must never block the data commit below.
+        continue-on-error: true
+        run: |
+          pip install -r requirements-reports.txt
+          jupyter nbconvert --to notebook --execute --inplace \
+            --ExecutePreprocessor.timeout=300 \
+            reports/01_group_breakdown.ipynb reports/02_top_scorers.ipynb
+          python scripts/render_report_pngs.py
+
       - name: Commit refreshed data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/worldcup.db reports/worldcup_tables.xlsx
+          git add data/worldcup.db reports/worldcup_tables.xlsx \
+                  reports/01_group_breakdown.ipynb reports/02_top_scorers.ipynb \
+                  reports/01_group_breakdown.png
           if git diff --staged --quiet; then
             echo "No data changes to commit."
           else
             mode="${{ github.event.inputs.mode || 'incremental' }}"
-            git commit -m "data: refresh worldcup.db ($mode, $(date -u +%Y-%m-%dT%H:%MZ)) [skip ci]"
+            git commit -m "data: refresh worldcup.db + reports ($mode, $(date -u +%Y-%m-%dT%H:%MZ)) [skip ci]"
             git push
           fi
