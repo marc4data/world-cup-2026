@@ -9,6 +9,7 @@ rebuild and never goes stale. Render/iterate with scripts/render_html.py:
 """
 from __future__ import annotations
 
+import calendar
 import html
 import sqlite3
 from datetime import datetime
@@ -220,7 +221,7 @@ def render(db_path=DB_PATH, out_path=REPORT_PATH, *, today=None) -> str:
 
 # --- Groups page: standings tables (left) + schedule (right) ----------------
 GROUPS_PATH = REPORT_PATH.with_name("page_groups.html")
-_STAND_COLS = ["#", "Team", "P", "Pts", "GD"]
+_STAND_COLS = ["#", "Team", "P", "PTS", "GD"]
 
 
 def load_group_standings(conn, group):
@@ -271,7 +272,7 @@ def build_groups_page(conn: sqlite3.Connection, today=None) -> str:
     <div class="title">Groups — Standings &amp; Schedule</div>
     <div class="meta">{played}/72 played · top 2 advance (+ 8 best 3rd) · times Pacific</div>
   </header>
-  <div class="legend"><span class="lgrp">green = top-2 zone · gold = won group · grey = out of top 2</span>
+  <div class="legend"><span class="lgrp">gold = won group · grey = out of top 2</span>
     <span class="key"><span class="kpick">outlined</span> = winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
   <div class="gbody">
     <div class="gtables">{tables}</div>
@@ -287,6 +288,142 @@ def render_groups(db_path=DB_PATH, out_path=GROUPS_PATH, *, today=None) -> str:
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(build_groups_page(conn, today))
+    finally:
+        conn.close()
+    return str(out_path)
+
+
+# --- Knockout page: tournament calendar + group-qualifiers array ------------
+KNOCKOUT_PATH = REPORT_PATH.with_name("page_knockout.html")
+
+# (label, color, (start_month, start_day), (end_month, end_day)) for 2026.
+_ROUND_BANDS = [
+    ("Group stage",    "#1f3a5f", (6, 11), (6, 27)),
+    ("Round of 32",    "#3d7bbf", (6, 28), (7, 3)),
+    ("Round of 16",    "#2e8b57", (7, 4),  (7, 7)),
+    ("Quarter-finals", "#c9a227", (7, 9),  (7, 11)),
+    ("Semi-finals",    "#c0504d", (7, 14), (7, 15)),
+    ("Third place",    "#7b5ea7", (7, 18), (7, 18)),
+    ("Final",          "#b8860b", (7, 19), (7, 19)),
+]
+
+
+def _round_color(month, day):
+    for _label, color, start, end in _ROUND_BANDS:
+        if start <= (month, day) <= end:
+            return color
+    return None
+
+
+def _month_cal(year, month, today) -> str:
+    head = "".join(f"<th>{d}</th>" for d in "SMTWTFS")
+    weeks = []
+    for wk in calendar.Calendar(firstweekday=6).monthdayscalendar(year, month):
+        cells = []
+        for d in wk:
+            if d == 0:
+                cells.append("<td></td>")
+                continue
+            c = _round_color(month, d)
+            style = f"background:{c};color:#fff;font-weight:700;" if c else "color:#b0bec5;"
+            tod = " cal-today" if (today.year, today.month, today.day) == (year, month, d) else ""
+            cells.append(f'<td class="calc{tod}" style="{style}">{d}</td>')
+        weeks.append(f"<tr>{''.join(cells)}</tr>")
+    name = datetime(year, month, 1).strftime("%B")
+    return (f'<table class="cal"><caption>{name}</caption>'
+            f'<thead><tr>{head}</tr></thead><tbody>{"".join(weeks)}</tbody></table>')
+
+
+def _round_legend() -> str:
+    return "".join(
+        f'<span class="rl"><span class="sw" style="background:{c}"></span>{label}</span>'
+        for label, c, *_ in _ROUND_BANDS)
+
+
+def _qualifiers(conn) -> str:
+    groups = [r[0] for r in conn.execute(
+        "SELECT DISTINCT group_label FROM standing WHERE group_label IS NOT NULL "
+        "ORDER BY group_label")]
+    cards = []
+    for g in groups:
+        rows = load_group_standings(conn, g)[:3]
+        slots = []
+        for i, r in enumerate(rows):
+            cls = f"qslot s{i + 1}"
+            cls += " won" if r["cf"] else " elim" if r["el"] else " thr" if r["ct"] else ""
+            gd = f'{r["goals_diff"]:+d}' if r["goals_diff"] is not None else ""
+            slots.append(
+                f'<span class="{cls}"><b>{html.escape(r["code"])}</b> {r["points"]}'
+                f'<span class="gd">({gd})</span></span>')
+        # pad if a group somehow has < 3 rows (early/empty)
+        slots += ['<span class="qslot empty">—</span>'] * (3 - len(slots))
+        cards.append(
+            f'<div class="qgrp"><span class="qgl">{html.escape(g)}</span>'
+            f'<div class="qslots">{"".join(slots)}</div></div>')
+    return "".join(cards)
+
+
+def _third_place_race(conn) -> str:
+    groups = [r[0] for r in conn.execute(
+        "SELECT DISTINCT group_label FROM standing WHERE group_label IS NOT NULL "
+        "ORDER BY group_label")]
+    thirds = []
+    for g in groups:
+        rows = load_group_standings(conn, g)
+        if len(rows) >= 3:
+            thirds.append((g, rows[2]))
+    thirds.sort(key=lambda gr: (-(gr[1]["points"] or 0), -(gr[1]["goals_diff"] or 0),
+                                -(gr[1]["goals_for"] or 0)))
+    items = []
+    for i, (g, r) in enumerate(thirds):
+        cls = "tp in" if i < 8 else "tp out"
+        gd = f'{r["goals_diff"]:+d}' if r["goals_diff"] is not None else ""
+        items.append(
+            f'<div class="{cls}"><span class="rk">{i + 1}</span>'
+            f'<span class="tg">{g[-1]}</span> <b>{html.escape(r["code"])}</b> '
+            f'{r["points"]}<span class="gd">({gd})</span></div>')
+    return "".join(items) or '<div class="tp out">— standings pending —</div>'
+
+
+def build_knockout_page(conn: sqlite3.Connection, today=None) -> str:
+    if today is None:
+        today = datetime.now(CUTOFF_TZ).date()
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<style>{_CSS}{_KNOCKOUT_CSS}</style></head><body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
+    <div class="title">Road to the Knockouts — Calendar &amp; Qualifiers</div>
+    <div class="meta">top 2 advance + 8 best 3rds · bracket matchups set once groups finish</div>
+  </header>
+  <div class="kbody">
+    <section class="kcal">
+      <h3>Tournament calendar · 2026</h3>
+      <div class="cals">{_month_cal(2026, 6, today)}{_month_cal(2026, 7, today)}</div>
+      <div class="rlegend">{_round_legend()}</div>
+    </section>
+    <section class="kqual">
+      <h3>Group qualifiers — projected order (1st › 2nd › 3rd by PTS, GD)</h3>
+      <div class="qgrid">{_qualifiers(conn)}</div>
+      <p class="note">Each group's current top 3 (code · PTS · GD). <b>1st</b> is the projected
+      group winner (outlined); colour = clinch status — gold won group, green through (top 2),
+      grey out of top 2. Updates each ingest.</p>
+    </section>
+    <section class="kthird">
+      <h3>Best 3rd-place race — top 8 advance to the Round of 32</h3>
+      <div class="tgrid">{_third_place_race(conn)}</div>
+    </section>
+  </div>
+  <footer>Generated from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
+</div></body></html>"""
+
+
+def render_knockout(db_path=DB_PATH, out_path=KNOCKOUT_PATH, *, today=None) -> str:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(build_knockout_page(conn, today))
     finally:
         conn.close()
     return str(out_path)
@@ -369,12 +506,52 @@ _GROUPS_CSS = """
 .gt td.tm .tw { display:inline-flex; align-items:center; gap:4px; font-weight:600; }
 .gt td.tm .lg { width:15px; height:15px; object-fit:contain; }
 .gt td.pts { font-weight:800; }
-.gt tr.qz td { background:#E8F5E9; }
 .gt tr.won td { background:#FFF6D6; }
 .gt tr.elim td { color:#9aa7b0; }
 """
 
 
+# Knockout page CSS (calendar + qualifiers array).
+_KNOCKOUT_CSS = """
+.kbody { flex:1; display:flex; flex-direction:column; padding:10px 16px 6px; gap:12px;
+         justify-content:space-between; overflow:hidden; }
+.kbody h3 { font-size:11px; color:""" + NAVY + """; text-transform:uppercase; letter-spacing:.6px;
+            border-bottom:2px solid """ + GOLD + """; padding-bottom:2px; margin-bottom:7px; }
+.cals { display:flex; gap:34px; align-items:flex-start; }
+.cal { border-collapse:collapse; font-size:9px; }
+.cal caption { text-align:left; font-weight:800; font-size:10.5px; color:""" + NAVY + """; padding-bottom:2px; }
+.cal th { color:#90a4ae; font-weight:700; font-size:8px; width:20px; height:14px; text-align:center; }
+.cal td { width:20px; height:17px; text-align:center; }
+.cal td.calc { border:1px solid #eceff1; border-radius:2px; }
+.cal td.cal-today { outline:2px solid """ + GOLD + """; outline-offset:-2px; }
+.rlegend { display:flex; flex-wrap:wrap; gap:14px; margin-top:8px; font-size:9px; color:#37474f; }
+.rl { display:inline-flex; align-items:center; gap:4px; }
+.sw { width:11px; height:11px; border-radius:2px; display:inline-block; }
+.qgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px 22px; align-content:start; }
+.qgrp { display:flex; align-items:center; gap:9px; }
+.qgl { width:56px; font-weight:800; font-size:11px; color:""" + NAVY + """; flex:0 0 auto; }
+.qslots { display:flex; gap:7px; flex:1; }
+.qslot { flex:1; text-align:center; font-size:11.5px; padding:5px 4px; border-radius:5px;
+         border:1.3px solid #e0e0e0; background:#fafafa; white-space:nowrap; }
+.qslot b { font-size:12.5px; }
+.qslot .gd { color:#90a4ae; font-size:9.5px; margin-left:2px; }
+.qslot.s1 { border:2px solid """ + NAVY + """; font-weight:700; }
+.qslot.won { background:#FFF6D6; border-color:""" + GOLD + """; }
+.qslot.thr { background:#E8F5E9; border-color:#2E7D32; }
+.qslot.elim { background:#F5F6F7; color:#9aa7b0; }
+.qslot.empty { color:#cfd8dc; background:transparent; border-style:dashed; }
+.tgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px 20px; }
+.tp { display:flex; align-items:center; gap:6px; font-size:11.5px; padding:5px 8px;
+      border-radius:5px; border:1.3px solid #e0e0e0; background:#fafafa; }
+.tp .rk { width:16px; text-align:center; font-weight:800; color:#90a4ae; flex:0 0 auto; }
+.tp .tg { font-weight:700; color:#607d8b; }
+.tp .gd { color:#90a4ae; font-size:9.5px; }
+.tp.in { background:#E8F5E9; border-color:#2E7D32; }
+.tp.out { background:#F5F6F7; color:#9aa7b0; }
+"""
+
+
 if __name__ == "__main__":
-    print("wrote", render())          # page 3 — matches
-    print("wrote", render_groups())   # new — groups standings + schedule
+    print("wrote", render())            # page 3 — matches
+    print("wrote", render_groups())     # groups — standings + schedule
+    print("wrote", render_knockout())   # knockout — calendar + qualifiers

@@ -1,0 +1,123 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color:#1a1a1a; }
+.page { width:11in; height:8.5in; background:#fff; padding:0; display:flex; flex-direction:column; overflow:hidden; }
+header { background:#0B1F3A; color:#fff; display:flex; align-items:center; gap:14px; padding:9px 16px; }
+header .brand { font-weight:800; letter-spacing:.5px; font-size:13px; }
+header .brand .logo { color:#C9A227; }
+header .brand .sub { font-weight:500; opacity:.7; font-size:9px; letter-spacing:1px; margin-left:4px; }
+header .title { font-size:15px; font-weight:700; flex:1; text-align:center; }
+header .meta { font-size:9.5px; opacity:.8; }
+.legend { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:5px 16px; font-size:9.5px;
+          background:#f4f6f8; border-bottom:1px solid #e3e7eb; color:#37474f; }
+.legend .lg-item { display:inline-flex; align-items:center; gap:3px; }
+.legend .key { margin-left:auto; color:#607d8b; }
+.legend .kpick { border:1.3px solid #455a64; border-radius:3px; padding:0 3px; font-weight:700; color:#37474f; }
+.grp { width:13px; text-align:center; font-weight:700; font-size:9px; color:#455a64; flex:0 0 auto; }
+.lgrp { color:#607d8b; font-weight:700; }
+.body { flex:1; display:flex; gap:12px; padding:8px 16px; overflow:hidden; }
+.schedule { flex:1; column-count:4; column-gap:14px; }
+.sidebar { width:2.25in; flex:0 0 auto; border-left:1px solid #e3e7eb; padding-left:12px; }
+.sidebar section { margin-bottom:13px; }
+.sidebar h3 { font-size:10.5px; color:#0B1F3A; border-bottom:2px solid #C9A227;
+              padding-bottom:2px; margin-bottom:6px; text-transform:uppercase; letter-spacing:.6px; }
+.qrow { margin-bottom:7px; }
+.qlab { display:block; font-size:9px; font-weight:800; margin-bottom:3px; text-transform:uppercase; letter-spacing:.3px; }
+.qlab.won { color:#9a7b15; } .qlab.thr { color:#2E7D32; } .qlab.out { color:#90A4AE; }
+.chip { display:inline-block; font-size:9px; padding:1px 6px; border-radius:9px; margin:0 3px 3px 0; }
+.chip.won { background:#FFF3CD; color:#7a5c00; } .chip.thr { background:#E8F5E9; color:#1B5E20; }
+.chip.out { background:#ECEFF1; color:#607D8B; } .chip.none { color:#b0bec5; }
+.srow { font-size:10px; display:flex; align-items:center; gap:5px; padding:1px 0; }
+.srow .score, .srow .proj, .srow .vs { width:auto; }
+.note { font-size:7.5px; color:#90a4ae; margin-top:5px; line-height:1.35; }
+.brow { display:flex; align-items:center; gap:6px; font-size:10px; padding:2px 0; border-bottom:1px solid #f0f2f4; }
+.brow .bg { width:16px; text-align:center; font-weight:800; color:#9a7b15; font-size:12px; flex:0 0 auto; }
+.brow .bn { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.brow .bt { color:#78909c; font-size:9px; flex:0 0 auto; }
+.brow .ba { color:#43a047; font-size:8px; flex:0 0 auto; }
+.brow.none { color:#b0bec5; font-style:italic; }
+.day { break-inside:avoid; margin-bottom:10px; }
+.day.today { background:#FFF8E1; border-radius:5px; padding:3px 4px; margin:-3px -4px 9px; }
+.dh { font-size:10px; font-weight:800; color:#0B1F3A; border-bottom:2px solid #C9A227;
+      padding-bottom:2px; margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; }
+.dh .now { background:#C9A227; color:#000; font-size:7.5px; font-weight:800; padding:1px 4px; border-radius:3px; }
+.fx { display:flex; align-items:center; gap:3px; font-size:10.5px; padding:2.5px 1px; text-decoration:none;
+      color:inherit; border-bottom:1px solid #f0f2f4; }
+.fx:hover { background:#eef4fb; }
+.fx .t { width:34px; color:#78909c; font-size:9.5px; flex:0 0 auto; white-space:nowrap; }
+.fx .team { flex:1; display:inline-flex; align-items:center; overflow:hidden; white-space:nowrap; }
+.fx .team.home { justify-content:flex-end; }
+.fx .team.away { justify-content:flex-start; }
+.fx .pick { display:inline-flex; align-items:center; gap:3px; border:1.3px solid transparent; padding:0 2px; border-radius:3px; }
+.fx .team.win .pick { border-color:#2E7D32; color:#1B5E20; font-weight:700; background:#F1F8F1; }
+.fx .team.fav .pick { border-color:#0D47A1; color:#0D47A1; font-weight:700; background:#F0F5FC; }
+.fx .lg { width:14px; height:14px; object-fit:contain; }
+.fx .score { width:40px; text-align:center; font-weight:800; flex:0 0 auto; }
+.fx .proj { width:40px; text-align:center; color:#0D47A1; font-size:9px; flex:0 0 auto; }
+.fx .vs { width:40px; text-align:center; color:#b0bec5; flex:0 0 auto; }
+.fx .num { width:22px; text-align:right; color:#b0bec5; font-size:8px; flex:0 0 auto; }
+footer { font-size:8px; color:#90a4ae; padding:3px 16px; border-top:1px solid #eceff1; text-align:right; }
+
+.kbody { flex:1; display:flex; flex-direction:column; padding:10px 16px 6px; gap:12px;
+         justify-content:space-between; overflow:hidden; }
+.kbody h3 { font-size:11px; color:#0B1F3A; text-transform:uppercase; letter-spacing:.6px;
+            border-bottom:2px solid #C9A227; padding-bottom:2px; margin-bottom:7px; }
+.cals { display:flex; gap:34px; align-items:flex-start; }
+.cal { border-collapse:collapse; font-size:9px; }
+.cal caption { text-align:left; font-weight:800; font-size:10.5px; color:#0B1F3A; padding-bottom:2px; }
+.cal th { color:#90a4ae; font-weight:700; font-size:8px; width:20px; height:14px; text-align:center; }
+.cal td { width:20px; height:17px; text-align:center; }
+.cal td.calc { border:1px solid #eceff1; border-radius:2px; }
+.cal td.cal-today { outline:2px solid #C9A227; outline-offset:-2px; }
+.rlegend { display:flex; flex-wrap:wrap; gap:14px; margin-top:8px; font-size:9px; color:#37474f; }
+.rl { display:inline-flex; align-items:center; gap:4px; }
+.sw { width:11px; height:11px; border-radius:2px; display:inline-block; }
+.qgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px 22px; align-content:start; }
+.qgrp { display:flex; align-items:center; gap:9px; }
+.qgl { width:56px; font-weight:800; font-size:11px; color:#0B1F3A; flex:0 0 auto; }
+.qslots { display:flex; gap:7px; flex:1; }
+.qslot { flex:1; text-align:center; font-size:11.5px; padding:5px 4px; border-radius:5px;
+         border:1.3px solid #e0e0e0; background:#fafafa; white-space:nowrap; }
+.qslot b { font-size:12.5px; }
+.qslot .gd { color:#90a4ae; font-size:9.5px; margin-left:2px; }
+.qslot.s1 { border:2px solid #0B1F3A; font-weight:700; }
+.qslot.won { background:#FFF6D6; border-color:#C9A227; }
+.qslot.thr { background:#E8F5E9; border-color:#2E7D32; }
+.qslot.elim { background:#F5F6F7; color:#9aa7b0; }
+.qslot.empty { color:#cfd8dc; background:transparent; border-style:dashed; }
+.tgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px 20px; }
+.tp { display:flex; align-items:center; gap:6px; font-size:11.5px; padding:5px 8px;
+      border-radius:5px; border:1.3px solid #e0e0e0; background:#fafafa; }
+.tp .rk { width:16px; text-align:center; font-weight:800; color:#90a4ae; flex:0 0 auto; }
+.tp .tg { font-weight:700; color:#607d8b; }
+.tp .gd { color:#90a4ae; font-size:9.5px; }
+.tp.in { background:#E8F5E9; border-color:#2E7D32; }
+.tp.out { background:#F5F6F7; color:#9aa7b0; }
+</style></head><body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
+    <div class="title">Road to the Knockouts — Calendar &amp; Qualifiers</div>
+    <div class="meta">top 2 advance + 8 best 3rds · bracket matchups set once groups finish</div>
+  </header>
+  <div class="kbody">
+    <section class="kcal">
+      <h3>Tournament calendar · 2026</h3>
+      <div class="cals"><table class="cal"><caption>June</caption><thead><tr><th>S</th><th>M</th><th>T</th><th>W</th><th>T</th><th>F</th><th>S</th></tr></thead><tbody><tr><td></td><td class="calc" style="color:#b0bec5;">1</td><td class="calc" style="color:#b0bec5;">2</td><td class="calc" style="color:#b0bec5;">3</td><td class="calc" style="color:#b0bec5;">4</td><td class="calc" style="color:#b0bec5;">5</td><td class="calc" style="color:#b0bec5;">6</td></tr><tr><td class="calc" style="color:#b0bec5;">7</td><td class="calc" style="color:#b0bec5;">8</td><td class="calc" style="color:#b0bec5;">9</td><td class="calc" style="color:#b0bec5;">10</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">11</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">12</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">13</td></tr><tr><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">14</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">15</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">16</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">17</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">18</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">19</td><td class="calc cal-today" style="background:#1f3a5f;color:#fff;font-weight:700;">20</td></tr><tr><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">21</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">22</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">23</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">24</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">25</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">26</td><td class="calc" style="background:#1f3a5f;color:#fff;font-weight:700;">27</td></tr><tr><td class="calc" style="background:#3d7bbf;color:#fff;font-weight:700;">28</td><td class="calc" style="background:#3d7bbf;color:#fff;font-weight:700;">29</td><td class="calc" style="background:#3d7bbf;color:#fff;font-weight:700;">30</td><td></td><td></td><td></td><td></td></tr></tbody></table><table class="cal"><caption>July</caption><thead><tr><th>S</th><th>M</th><th>T</th><th>W</th><th>T</th><th>F</th><th>S</th></tr></thead><tbody><tr><td></td><td></td><td></td><td class="calc" style="background:#3d7bbf;color:#fff;font-weight:700;">1</td><td class="calc" style="background:#3d7bbf;color:#fff;font-weight:700;">2</td><td class="calc" style="background:#3d7bbf;color:#fff;font-weight:700;">3</td><td class="calc" style="background:#2e8b57;color:#fff;font-weight:700;">4</td></tr><tr><td class="calc" style="background:#2e8b57;color:#fff;font-weight:700;">5</td><td class="calc" style="background:#2e8b57;color:#fff;font-weight:700;">6</td><td class="calc" style="background:#2e8b57;color:#fff;font-weight:700;">7</td><td class="calc" style="color:#b0bec5;">8</td><td class="calc" style="background:#c9a227;color:#fff;font-weight:700;">9</td><td class="calc" style="background:#c9a227;color:#fff;font-weight:700;">10</td><td class="calc" style="background:#c9a227;color:#fff;font-weight:700;">11</td></tr><tr><td class="calc" style="color:#b0bec5;">12</td><td class="calc" style="color:#b0bec5;">13</td><td class="calc" style="background:#c0504d;color:#fff;font-weight:700;">14</td><td class="calc" style="background:#c0504d;color:#fff;font-weight:700;">15</td><td class="calc" style="color:#b0bec5;">16</td><td class="calc" style="color:#b0bec5;">17</td><td class="calc" style="background:#7b5ea7;color:#fff;font-weight:700;">18</td></tr><tr><td class="calc" style="background:#b8860b;color:#fff;font-weight:700;">19</td><td class="calc" style="color:#b0bec5;">20</td><td class="calc" style="color:#b0bec5;">21</td><td class="calc" style="color:#b0bec5;">22</td><td class="calc" style="color:#b0bec5;">23</td><td class="calc" style="color:#b0bec5;">24</td><td class="calc" style="color:#b0bec5;">25</td></tr><tr><td class="calc" style="color:#b0bec5;">26</td><td class="calc" style="color:#b0bec5;">27</td><td class="calc" style="color:#b0bec5;">28</td><td class="calc" style="color:#b0bec5;">29</td><td class="calc" style="color:#b0bec5;">30</td><td class="calc" style="color:#b0bec5;">31</td><td></td></tr></tbody></table></div>
+      <div class="rlegend"><span class="rl"><span class="sw" style="background:#1f3a5f"></span>Group stage</span><span class="rl"><span class="sw" style="background:#3d7bbf"></span>Round of 32</span><span class="rl"><span class="sw" style="background:#2e8b57"></span>Round of 16</span><span class="rl"><span class="sw" style="background:#c9a227"></span>Quarter-finals</span><span class="rl"><span class="sw" style="background:#c0504d"></span>Semi-finals</span><span class="rl"><span class="sw" style="background:#7b5ea7"></span>Third place</span><span class="rl"><span class="sw" style="background:#b8860b"></span>Final</span></div>
+    </section>
+    <section class="kqual">
+      <h3>Group qualifiers — projected order (1st › 2nd › 3rd by PTS, GD)</h3>
+      <div class="qgrid"><div class="qgrp"><span class="qgl">Group A</span><div class="qslots"><span class="qslot s1 thr"><b>MEX</b> 6<span class="gd">(+3)</span></span><span class="qslot s2"><b>KOR</b> 3<span class="gd">(+0)</span></span><span class="qslot s3"><b>CZE</b> 1<span class="gd">(-1)</span></span></div></div><div class="qgrp"><span class="qgl">Group B</span><div class="qslots"><span class="qslot s1"><b>CAN</b> 4<span class="gd">(+6)</span></span><span class="qslot s2"><b>SUI</b> 4<span class="gd">(+3)</span></span><span class="qslot s3"><b>BIH</b> 1<span class="gd">(-3)</span></span></div></div><div class="qgrp"><span class="qgl">Group C</span><div class="qslots"><span class="qslot s1"><b>BRA</b> 4<span class="gd">(+3)</span></span><span class="qslot s2"><b>MAR</b> 4<span class="gd">(+1)</span></span><span class="qslot s3"><b>SCO</b> 3<span class="gd">(+0)</span></span></div></div><div class="qgrp"><span class="qgl">Group D</span><div class="qslots"><span class="qslot s1 thr"><b>USA</b> 6<span class="gd">(+5)</span></span><span class="qslot s2"><b>AUS</b> 3<span class="gd">(+0)</span></span><span class="qslot s3"><b>PAR</b> 3<span class="gd">(-2)</span></span></div></div><div class="qgrp"><span class="qgl">Group E</span><div class="qslots"><span class="qslot s1"><b>GER</b> 3<span class="gd">(+6)</span></span><span class="qslot s2"><b>CIV</b> 3<span class="gd">(+1)</span></span><span class="qslot s3"><b>ECU</b> 0<span class="gd">(-1)</span></span></div></div><div class="qgrp"><span class="qgl">Group F</span><div class="qslots"><span class="qslot s1"><b>SWE</b> 3<span class="gd">(+4)</span></span><span class="qslot s2"><b>JPN</b> 1<span class="gd">(+0)</span></span><span class="qslot s3"><b>NED</b> 1<span class="gd">(+0)</span></span></div></div><div class="qgrp"><span class="qgl">Group G</span><div class="qslots"><span class="qslot s1"><b>NZL</b> 1<span class="gd">(+0)</span></span><span class="qslot s2"><b>IRN</b> 1<span class="gd">(+0)</span></span><span class="qslot s3"><b>BEL</b> 1<span class="gd">(+0)</span></span></div></div><div class="qgrp"><span class="qgl">Group H</span><div class="qslots"><span class="qslot s1"><b>URU</b> 1<span class="gd">(+0)</span></span><span class="qslot s2"><b>KSA</b> 1<span class="gd">(+0)</span></span><span class="qslot s3"><b>ESP</b> 1<span class="gd">(+0)</span></span></div></div><div class="qgrp"><span class="qgl">Group I</span><div class="qslots"><span class="qslot s1"><b>NOR</b> 3<span class="gd">(+3)</span></span><span class="qslot s2"><b>FRA</b> 3<span class="gd">(+2)</span></span><span class="qslot s3"><b>SEN</b> 0<span class="gd">(-2)</span></span></div></div><div class="qgrp"><span class="qgl">Group J</span><div class="qslots"><span class="qslot s1"><b>ARG</b> 3<span class="gd">(+3)</span></span><span class="qslot s2"><b>AUT</b> 3<span class="gd">(+2)</span></span><span class="qslot s3"><b>JOR</b> 0<span class="gd">(-2)</span></span></div></div><div class="qgrp"><span class="qgl">Group K</span><div class="qslots"><span class="qslot s1"><b>COL</b> 3<span class="gd">(+2)</span></span><span class="qslot s2"><b>CGO</b> 1<span class="gd">(+0)</span></span><span class="qslot s3"><b>POR</b> 1<span class="gd">(+0)</span></span></div></div><div class="qgrp"><span class="qgl">Group L</span><div class="qslots"><span class="qslot s1"><b>ENG</b> 3<span class="gd">(+2)</span></span><span class="qslot s2"><b>GHA</b> 3<span class="gd">(+1)</span></span><span class="qslot s3"><b>PAN</b> 0<span class="gd">(-1)</span></span></div></div></div>
+      <p class="note">Each group's current top 3 (code · PTS · GD). <b>1st</b> is the projected
+      group winner (outlined); colour = clinch status — gold won group, green through (top 2),
+      grey out of top 2. Updates each ingest.</p>
+    </section>
+    <section class="kthird">
+      <h3>Best 3rd-place race — top 8 advance to the Round of 32</h3>
+      <div class="tgrid"><div class="tp in"><span class="rk">1</span><span class="tg">C</span> <b>SCO</b> 3<span class="gd">(+0)</span></div><div class="tp in"><span class="rk">2</span><span class="tg">D</span> <b>PAR</b> 3<span class="gd">(-2)</span></div><div class="tp in"><span class="rk">3</span><span class="tg">F</span> <b>NED</b> 1<span class="gd">(+0)</span></div><div class="tp in"><span class="rk">4</span><span class="tg">G</span> <b>BEL</b> 1<span class="gd">(+0)</span></div><div class="tp in"><span class="rk">5</span><span class="tg">K</span> <b>POR</b> 1<span class="gd">(+0)</span></div><div class="tp in"><span class="rk">6</span><span class="tg">H</span> <b>ESP</b> 1<span class="gd">(+0)</span></div><div class="tp in"><span class="rk">7</span><span class="tg">A</span> <b>CZE</b> 1<span class="gd">(-1)</span></div><div class="tp in"><span class="rk">8</span><span class="tg">B</span> <b>BIH</b> 1<span class="gd">(-3)</span></div><div class="tp out"><span class="rk">9</span><span class="tg">E</span> <b>ECU</b> 0<span class="gd">(-1)</span></div><div class="tp out"><span class="rk">10</span><span class="tg">L</span> <b>PAN</b> 0<span class="gd">(-1)</span></div><div class="tp out"><span class="rk">11</span><span class="tg">I</span> <b>SEN</b> 0<span class="gd">(-2)</span></div><div class="tp out"><span class="rk">12</span><span class="tg">J</span> <b>JOR</b> 0<span class="gd">(-2)</span></div></div>
+    </section>
+  </div>
+  <footer>Generated from worldcup.db · 2026-06-20 15:34 PT</footer>
+</div></body></html>

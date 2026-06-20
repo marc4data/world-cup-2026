@@ -40,3 +40,12 @@ def test_groups_page_empty_and_seeded(conn, teams):
     out = report_html.build_groups_page(conn, today=date(2026, 6, 20))
     assert '<table class="gt">' in out          # a standings table rendered
     assert "ALP" in out or "Alpha" in out
+
+
+def test_knockout_page_builds(conn):
+    out = report_html.build_knockout_page(conn, today=date(2026, 6, 20))
+    assert '<div class="page">' in out
+    assert "Tournament calendar" in out
+    assert "June" in out and "July" in out          # both month calendars
+    assert "Best 3rd-place race" in out
+    assert "Group qualifiers" in out
