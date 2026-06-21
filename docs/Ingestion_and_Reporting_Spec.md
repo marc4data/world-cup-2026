@@ -52,9 +52,10 @@ Build a small, reliable data pipeline that ingests **finished** 2026 FIFA World 
 - Keyed by **venue latitude/longitude** + match kickoff datetime (UTC). Not counted against API-Football limit.
 - Venue coordinates: maintained in a small static lookup (`venues_geo.csv`, 16 rows) since API-Football venue records don't include lat/long.
 
-### 3.3 The "finished as of midnight previous day" rule
-- A fixture is **eligible for the finished store** when: status ∈ {`FT`,`AET`,`PEN`} **AND** kickoff date `<` today's date in `CUTOFF_TZ`.
-- `CUTOFF_TZ` is configurable (**default: `America/Los_Angeles` (PT)**). This guarantees in-progress and same-day matches are excluded from "finished" aggregates while still being tracked as scheduled.
+### 3.3 The "finished through today" rule
+- A fixture is **eligible for the finished store** when: status ∈ {`FT`,`AET`,`PEN`} **AND** kickoff date `<=` today's date in `CUTOFF_TZ`.
+- `CUTOFF_TZ` is configurable (**default: `America/Los_Angeles` (PT)**). In-progress (e.g. `1H`/`HT`/`2H`) and future-dated matches are still excluded from "finished" aggregates while tracked as scheduled.
+- **Deviation (2026-06-20):** the boundary was relaxed from `<` to `<=` so **today's completed matches** are included as soon as the API reports a final status, rather than waiting until the next PT day. This keeps same-day group standings/schedules current and makes our 3/1/0 recompute reconcile with the live API standings. The status guard (`FT`/`AET`/`PEN`) still keeps in-progress and not-started matches out, so nothing partial is ever counted.
 
 ---
 
@@ -180,7 +181,7 @@ Orphan prevention is structural: `FOREIGN KEY` + `PRAGMA foreign_keys=ON`, and p
 
 ### 6.2 Daily incremental algorithm
 ```
-1. Determine cutoff = midnight today in CUTOFF_TZ  → eligible = kickoff_date < today.
+1. Determine cutoff = midnight today in CUTOFF_TZ  → eligible = kickoff_date <= today.
 2. GET /fixtures (1 call)  → upsert all fixtures; set is_finished per §3.3 rule.
 3. GET /standings (1 call) → overwrite standing rows for this season/league.
 4. For each fixture with no cached prediction AND prediction available:

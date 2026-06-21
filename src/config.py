@@ -18,7 +18,8 @@ SEASON = 2026
 
 # --- Cutoff rule (spec §3.3) -----------------------------------------------
 # A fixture counts as "finished" only when its status is in FINISHED_STATUSES
-# AND its kickoff date is strictly before "today" in CUTOFF_TZ.
+# AND its kickoff date is on or before "today" in CUTOFF_TZ (today's completed
+# matches count; future-dated fixtures never do).
 CUTOFF_TZ = ZoneInfo("America/Los_Angeles")
 FINISHED_STATUSES = frozenset({"FT", "AET", "PEN"})
 

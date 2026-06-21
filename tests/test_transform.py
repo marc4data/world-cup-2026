@@ -51,18 +51,21 @@ def test_transform_fixtures_finished_rule_and_labels():
     venue_map = {"Estadio Azteca": 14}
     cutoff = date(2026, 6, 15)
     raw = [
-        _raw_fixture(10, "FT", "2026-06-11T19:00:00+00:00", 1, 2, "Estadio Azteca", 2, 0),  # finished
-        _raw_fixture(11, "FT", "2026-06-15T19:00:00+00:00", 1, 2, "Estadio Azteca", 1, 1),  # FT but today -> not finished
+        _raw_fixture(10, "FT", "2026-06-11T19:00:00+00:00", 1, 2, "Estadio Azteca", 2, 0),  # past, FT -> finished
+        _raw_fixture(11, "FT", "2026-06-15T19:00:00+00:00", 1, 2, "Estadio Azteca", 1, 1),  # today, FT -> finished
         _raw_fixture(12, "NS", "2026-06-20T19:00:00+00:00", 1, 3, "Unknown Park"),           # cross-group, unmatched venue
+        _raw_fixture(13, "FT", "2026-06-16T19:00:00+00:00", 1, 2, "Estadio Azteca", 3, 0),  # future day -> NOT finished
     ]
     rows, unmatched = transform.transform_fixtures(raw, team_to_group, venue_map, cutoff_date=cutoff)
     by_id = {r["fixture_id"]: r for r in rows}
 
     assert by_id[10]["is_finished"] == 1 and by_id[10]["score_ft"] == "2-0"
     assert by_id[10]["group_label"] == "Group A" and by_id[10]["venue_id"] == 14
-    assert by_id[11]["is_finished"] == 0          # finished status but kickoff == cutoff day
+    assert by_id[11]["is_finished"] == 1          # finished status on the cutoff day now counts
+    assert by_id[12]["is_finished"] == 0          # not started
     assert by_id[12]["group_label"] is None       # teams in different groups
     assert by_id[12]["venue_id"] is None
+    assert by_id[13]["is_finished"] == 0          # FT but kickoff is after the cutoff day
     assert unmatched == {"Unknown Park"}
 
 

@@ -133,9 +133,10 @@ def transform_fixtures(
 ) -> tuple[list[dict], set[str]]:
     """Return (fixture rows, set of unmatched venue names).
 
-    `is_finished` = status in {FT,AET,PEN} AND kickoff date (in CUTOFF_TZ) is
-    strictly before the cutoff day (spec §3.3). group_label is set only when both
-    teams share a real group (group-stage matches); knockouts stay NULL.
+    `is_finished` = status in {FT,AET,PEN} AND kickoff date (in CUTOFF_TZ) is on or
+    before the cutoff day (spec §3.3) — today's completed matches count, but
+    future-dated fixtures never do. group_label is set only when both teams share a
+    real group (group-stage matches); knockouts stay NULL.
     """
     if cutoff_date is None:
         cutoff_date = datetime.now(CUTOFF_TZ).date()
@@ -145,7 +146,7 @@ def transform_fixtures(
         status = fx["status"]["short"]
         kickoff_dt = datetime.fromisoformat(fx["date"])
         kickoff_date_pt = kickoff_dt.astimezone(CUTOFF_TZ).date()
-        is_finished = int(status in FINISHED_STATUSES and kickoff_date_pt < cutoff_date)
+        is_finished = int(status in FINISHED_STATUSES and kickoff_date_pt <= cutoff_date)
 
         home_id = f["teams"]["home"]["id"]
         away_id = f["teams"]["away"]["id"]

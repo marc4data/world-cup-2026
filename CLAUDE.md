@@ -87,7 +87,7 @@ Python 3.11+, `requests`, `pandas`, `matplotlib`, `pytest`, stdlib `sqlite3`. Ke
 2. **No orphans:** `PRAGMA foreign_keys=ON`; load parents (team, venue) before children (fixture, standing, prediction, weather); add a post-load check asserting zero orphaned child rows.
 3. **Predictions are immutable:** fetch `/predictions?fixture=ID` once per fixture, cache permanently, never overwrite (preserve the pre-match projection for prediction-vs-actual validation).
 4. **Rate-limit guard:** `/fixtures` and `/standings` are 1 call each (return everything); cap **new predictions at 10 per run**; Open-Meteo is separate and free. Log calls used into the `load_run` audit table.
-5. **Finished rule:** a fixture counts as finished when status ∈ {FT, AET, PEN} AND kickoff date < today in `CUTOFF_TZ` (PT).
+5. **Finished rule:** a fixture counts as finished when status ∈ {FT, AET, PEN} AND kickoff date ≤ today in `CUTOFF_TZ` (PT). (Relaxed from `<` to `≤` on 2026-06-20 so today's completed matches are included; the status guard still excludes in-progress/not-started — see spec §3.3.)
 6. **Group letters** aren't on the fixture object — derive `team_id → group_label` from `/standings`, then label group-stage fixtures by their teams.
 7. **Degrade gracefully:** early-tournament gaps (missing predictions/weather/standings) render as blanks, never errors.
 
