@@ -688,11 +688,11 @@ header .meta { font-size:9.5px; opacity:.8; }
 .legend .lg-item { display:inline-flex; align-items:center; gap:3px; }
 .legend .key { margin-left:auto; color:#607d8b; }
 .legend .kpick { border:1.3px solid #455a64; border-radius:3px; padding:0 3px; font-weight:700; color:#37474f; }
-.grp { width:13px; text-align:center; font-weight:700; font-size:9px; color:#455a64; flex:0 0 auto; }
+.grp { width:11px; text-align:center; font-weight:700; font-size:9px; color:#455a64; flex:0 0 auto; }
 .lgrp { color:#607d8b; font-weight:700; }
-.body { flex:1; display:flex; gap:12px; padding:8px 16px; overflow:hidden; }
-.schedule { flex:1; column-count:4; column-gap:14px; }
-.sidebar { width:2.25in; flex:0 0 auto; border-left:1px solid #e3e7eb; padding-left:12px; }
+.body { flex:1; display:flex; gap:8px; padding:8px 12px; overflow:hidden; }
+.schedule { flex:1; column-count:4; column-gap:9px; }
+.sidebar { width:2.05in; flex:0 0 auto; border-left:1px solid #e3e7eb; padding-left:10px; }
 .sidebar section { margin-bottom:13px; }
 .sidebar h3 { font-size:10.5px; color:""" + NAVY + """; border-bottom:2px solid """ + GOLD + """;
               padding-bottom:2px; margin-bottom:6px; text-transform:uppercase; letter-spacing:.6px; }
@@ -716,23 +716,23 @@ header .meta { font-size:9.5px; opacity:.8; }
 .dh { font-size:10px; font-weight:800; color:""" + NAVY + """; border-bottom:2px solid """ + GOLD + """;
       padding-bottom:2px; margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; }
 .dh .now { background:""" + GOLD + """; color:#000; font-size:7.5px; font-weight:800; padding:1px 4px; border-radius:3px; }
-.fx { display:flex; align-items:center; gap:3px; font-size:10.5px; padding:2.5px 1px; text-decoration:none;
+.fx { display:flex; align-items:center; gap:2px; font-size:10.5px; padding:2.5px 1px; text-decoration:none;
       color:inherit; border-bottom:1px solid #f0f2f4; }
 .fx:hover { background:#eef4fb; }
-.fx .t { width:34px; color:#78909c; font-size:9.5px; flex:0 0 auto; white-space:nowrap; }
+.fx .t { width:32px; color:#78909c; font-size:9.5px; flex:0 0 auto; white-space:nowrap; }
 .fx .team { flex:1; display:inline-flex; align-items:center; overflow:hidden; white-space:nowrap; }
 .fx .team.home { justify-content:flex-end; }
 .fx .team.away { justify-content:flex-start; }
 .fx .pick { display:inline-flex; align-items:center; gap:3px; border:1.3px solid transparent; padding:0 2px; border-radius:3px; }
 .fx .team.win .pick { border-color:#2E7D32; color:#1B5E20; font-weight:700; background:#F1F8F1; }
 .fx .team.fav .pick { border-color:#0D47A1; color:#0D47A1; font-weight:700; background:#F0F5FC; }
-.fx .lg { width:14px; height:14px; object-fit:contain; }
-.fx .score { width:40px; text-align:center; font-weight:800; flex:0 0 auto; }
-.fx .proj { width:40px; text-align:center; color:#0D47A1; font-size:9px; flex:0 0 auto; }
-.fx .vs { width:40px; text-align:center; color:#b0bec5; flex:0 0 auto; }
-.fx .ven { min-width:23px; text-align:center; color:#5a6b7a; font-size:8px; font-weight:700;
+.fx .lg { width:13px; height:13px; object-fit:contain; }
+.fx .score { width:32px; text-align:center; font-weight:800; flex:0 0 auto; }
+.fx .proj { width:32px; text-align:center; color:#0D47A1; font-size:9px; flex:0 0 auto; }
+.fx .vs { width:30px; text-align:center; color:#b0bec5; flex:0 0 auto; }
+.fx .ven { min-width:20px; text-align:center; color:#5a6b7a; font-size:8px; font-weight:700;
            background:#eef1f4; border-radius:3px; padding:0 2px; flex:0 0 auto; letter-spacing:.2px; }
-.fx .wx { width:44px; text-align:right; color:#607d8b; font-size:9px; flex:0 0 auto;
+.fx .wx { width:39px; text-align:right; color:#607d8b; font-size:9px; flex:0 0 auto;
           white-space:nowrap; }
 .fx .wx .wi { margin-right:2px; font-size:10px; }
 .vlegend { display:flex; flex-wrap:wrap; align-items:center; gap:2px 9px; padding:4px 16px;
@@ -745,10 +745,10 @@ footer { font-size:8px; color:#90a4ae; padding:3px 16px; border-top:1px solid #e
 
 # Extra CSS for the Groups page (standings tables left, schedule right).
 _GROUPS_CSS = """
-.gbody { flex:1; display:flex; gap:16px; padding:8px 16px; overflow:hidden; }
-.gtables { width:3.35in; flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr;
-           grid-template-rows:repeat(6,1fr); grid-auto-flow:column; gap:0 16px; height:100%; }
-.gsched { flex:1; column-count:3; column-gap:13px; }
+.gbody { flex:1; display:flex; gap:10px; padding:8px 12px; overflow:hidden; }
+.gtables { width:2.8in; flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr;
+           grid-template-rows:repeat(6,1fr); grid-auto-flow:column; gap:0 10px; height:100%; }
+.gsched { flex:1; column-count:3; column-gap:10px; }
 .gt { width:100%; border-collapse:collapse; font-size:10px; align-self:center; }
 .gt caption { background:""" + NAVY + """; color:#fff; text-align:left; font-weight:800;
               font-size:10.5px; padding:2.5px 7px; letter-spacing:.4px; }
