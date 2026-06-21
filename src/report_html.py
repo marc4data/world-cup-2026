@@ -542,17 +542,47 @@ _TREE_SF  = [(101, 97, 98), (102, 99, 100)]
 _TREE_FIN = (104, 101, 102)
 
 
-def _bracket_teams(conn) -> dict:
-    """group-letter -> {'W': winner row, 'RU': runner-up row, '3': third row}."""
-    out = {}
-    groups = [r[0] for r in conn.execute(
-        "SELECT DISTINCT group_label FROM standing WHERE group_label IS NOT NULL "
-        "ORDER BY group_label")]
-    for g in groups:
-        rows = load_group_standings(conn, g)
-        out[g[-1]] = {"W":  rows[0] if len(rows) > 0 else None,
-                      "RU": rows[1] if len(rows) > 1 else None,
-                      "3":  rows[2] if len(rows) > 2 else None}
+# Per-match date · venue for the knockout rounds (recovered from the source SVG).
+_KO_INFO = {
+    89: ("Jul 4", "Philadelphia"), 90: ("Jul 4", "Houston"),
+    93: ("Jul 6", "Arlington"),    94: ("Jul 6", "Seattle"),
+    91: ("Jul 5", "New Jersey"),   92: ("Jul 5", "Mexico City"),
+    95: ("Jul 7", "Atlanta"),      96: ("Jul 7", "Vancouver"),
+    97: ("Jul 9", "Foxborough"),   98: ("Jul 10", "Los Angeles"),
+    99: ("Jul 11", "Miami"),       100: ("Jul 11", "Kansas City"),
+    101: ("Jul 14", "Arlington"),  102: ("Jul 15", "Atlanta"),
+    103: ("Jul 18", "Miami"),      104: ("Jul 19", "New Jersey"),
+}
+# Round colours — matched to the calendar bands (_ROUND_BANDS) so the same hue
+# means the same round on the timeline legend and across the bracket.
+_RC = {"R32": "#3d7bbf", "R16": "#2e8b57", "QF": "#c9a227",
+       "SF": "#c0504d", "F": "#b8860b", "3P": "#7b5ea7"}
+
+
+def _group_positions(conn) -> dict:
+    """group-letter -> {'rows': top-to-bottom standing rows, 'lock': {pos: row}}.
+
+    A position is *locked* only when exactly one team's guaranteed finish is that
+    position (best_pos == worst_pos), i.e. it is mathematically settled. Until
+    then the slot stays open and the bracket shows the contender array, never an
+    assumed team.
+    """
+    rows = conn.execute(
+        """SELECT q.group_label g, q.position pos, t.code, t.logo,
+                  COALESCE(s.points, q.points) pts,
+                  COALESCE(s.goals_diff, q.goals_diff) gd,
+                  q.best_pos, q.worst_pos
+           FROM group_qualification q
+           JOIN team t ON t.team_id = q.team_id
+           LEFT JOIN standing s ON s.team_id = q.team_id AND s.group_label = q.group_label
+             AND s.season = q.season AND s.league_id = q.league_id
+           ORDER BY q.group_label, q.position""").fetchall()
+    out: dict = {}
+    for r in rows:
+        d = out.setdefault(r["g"][-1], {"rows": [], "lock": {}})
+        d["rows"].append(r)
+        if r["best_pos"] is not None and r["best_pos"] == r["worst_pos"]:
+            d["lock"][r["best_pos"]] = r
     return out
 
 
@@ -569,96 +599,120 @@ def _thirds_in_top8(conn) -> set:
     return {letter for letter, _ in ranked[:8]}
 
 
-def _b_slot(feeder, teams, thirds_in) -> str:
+def _arr_cell(r, *, lead) -> str:
+    gd = f'({r["gd"]:+d})' if r["gd"] is not None else ""
+    return (f'<span class="ac{" lead" if lead else ""}">{html.escape(r["code"])}'
+            f'<b>{r["pts"]}</b><i>{gd}</i></span>')
+
+
+def _slot(feeder, gpos, thirds_in) -> str:
+    """One R32 feeder: a locked team if mathematically settled, else the array."""
     kind, key = feeder
-    if kind == "3":
-        chips = "".join(
-            f'<span class="cch">{html.escape(teams[g]["3"]["code"])}</span>'
-            for g in key.split("/")
-            if teams.get(g, {}).get("3") and g in thirds_in)
-        return (f'<div class="bslot tbd"><span class="bteam">3rd place</span>'
-                f'<span class="bset">{html.escape(key)}</span>'
-                f'<span class="cands">{chips}</span></div>')
-    row = teams.get(key, {}).get(kind)
-    lab = ("Winner" if kind == "W" else "2nd") + " " + key
-    if row is None:
-        return (f'<div class="bslot proj"><span class="bteam">—</span>'
-                f'<span class="bset">{lab}</span></div>')
-    if kind == "W":
-        st = "lock" if row["cf"] else "in" if row["ct"] else "proj"
-    else:
-        st = "out" if row["el"] else "in" if row["ct"] else "proj"
-    glyph = {"lock": "✓", "in": "●", "proj": "·", "out": "×"}[st]
-    logo = f'<img class="blg" src="{html.escape(row["logo"])}">' if row["logo"] else ""
-    gd = f'{row["goals_diff"]:+d}' if row["goals_diff"] is not None else ""
-    return (f'<div class="bslot {st}">{logo}'
-            f'<span class="bcode">{html.escape(row["code"])}</span>'
-            f'<span class="bset">{lab}</span>'
-            f'<span class="bpts">{row["points"]}<i>{gd}</i></span>'
-            f'<span class="bglyph">{glyph}</span></div>')
+    if kind == "3":                         # 3rd-place set — never assigned yet
+        cands = [gpos[g]["rows"][2] for g in key.split("/")
+                 if g in gpos and len(gpos[g]["rows"]) > 2 and g in thirds_in]
+        cands.sort(key=lambda r: (-(r["pts"] or 0), -(r["gd"] or 0)))
+        chips = "".join(_arr_cell(r, lead=False) for r in cands[:3])
+        return (f'<div class="slot s3"><span class="slab" style="color:{_RC["3P"]}">3rd</span>'
+                f'<span class="sset">{html.escape(key)}</span>'
+                f'<span class="arr">{chips}</span></div>')
+    g, pos = key, (1 if kind == "W" else 2)
+    gp = gpos.get(g, {"rows": [], "lock": {}})
+    lab = ("1st " if kind == "W" else "2nd ") + g
+    locked = gp["lock"].get(pos)
+    if locked is not None:                  # mathematically settled -> real team
+        logo = f'<img class="sflag" src="{html.escape(locked["logo"])}">' if locked["logo"] else ""
+        return (f'<div class="slot lock">{logo}'
+                f'<span class="scode">{html.escape(locked["code"])}</span>'
+                f'<span class="slab">{lab} ✓</span></div>')
+    arr = "".join(_arr_cell(r, lead=(i + 1 == pos)) for i, r in enumerate(gp["rows"][:3]))
+    return (f'<div class="slot open"><span class="slab">{lab}?</span>'
+            f'<span class="arr">{arr}</span></div>')
 
 
-def _r32_card(match, teams, thirds_in) -> str:
+def _r32_inner(match, gpos, thirds_in) -> str:
     num, top, bot, date, venue = match
-    where = f'{date} · {venue}' if date else 'date TBD'
-    return (f'<div class="bcard"><div class="bch"><b>M{num}</b>'
-            f'<span class="bwhen">{html.escape(where)}</span></div>'
-            f'{_b_slot(top, teams, thirds_in)}{_b_slot(bot, teams, thirds_in)}</div>')
+    when = f'{date} · {venue}' if date else 'date TBD'
+    return (f'<div class="mhd" style="background:{_RC["R32"]}"><b>M{num}</b>'
+            f'<span>{html.escape(when)}</span></div>'
+            f'{_slot(top, gpos, thirds_in)}{_slot(bot, gpos, thirds_in)}')
 
 
-def _funnel_chip(num, a, b, *, prefix="W") -> str:
-    return (f'<span class="fch"><b>M{num}</b>'
-            f'<span class="ff">{prefix}{a}·{prefix}{b}</span></span>')
+def _ko_inner(num, a, b, rc, *, prefix="W") -> str:
+    date, venue = _KO_INFO.get(num, ("", ""))
+    return (f'<div class="mhd" style="background:{rc}"><b>M{num}</b>'
+            f'<span>{html.escape(date)} · {html.escape(venue)}</span></div>'
+            f'<div class="koft">{prefix}{a} <em>v</em> {prefix}{b}</div>')
 
 
-def _funnel() -> str:
-    r16l = "".join(_funnel_chip(n, a, b) for n, a, b in _TREE_R16[:4])
-    r16r = "".join(_funnel_chip(n, a, b) for n, a, b in _TREE_R16[4:])
-    qf = "".join(_funnel_chip(n, a, b) for n, a, b in _TREE_QF)
-    sf = "".join(_funnel_chip(n, a, b) for n, a, b in _TREE_SF)
-    fn, fa, fb = _TREE_FIN
-    return f"""
-      <div class="frow"><span class="flab">Round of 16 · Jul 4–7</span>
-        <div class="fchips">{r16l}</div><div class="fchips">{r16r}</div></div>
-      <div class="frow"><span class="flab">Quarter-finals · Jul 9–11</span>
-        <div class="fchips">{qf}</div></div>
-      <div class="frow"><span class="flab">Semi-finals · Jul 14–15</span>
-        <div class="fchips">{sf}</div></div>
-      <div class="frow"><span class="flab">3rd place · Jul 18 · Miami</span>
-        <div class="fchips">{_funnel_chip(103, 101, 102, prefix="L")}</div></div>
-      <div class="frow fin"><span class="flab">FINAL · Jul 19 · New Jersey</span>
-        <div class="fchips">{_funnel_chip(fn, fa, fb)}</div></div>"""
+def _box(col, rs, span, inner, rc, *, cls="", fed="") -> str:
+    # The .cell fills the whole grid area so the connector pseudo-elements anchor
+    # to the feeders' quarter-points; the visible .mtch is centred inside it.
+    return (f'<div class="cell {fed}" '
+            f'style="grid-column:{col};grid-row:{rs}/span {span};--rc:{rc}">'
+            f'<div class="mtch {cls}">{inner}</div></div>')
+
+
+def _bracket_grid(gpos, thirds_in) -> str:
+    """The full converging tree: R32 outer columns -> R16 -> QF -> SF -> Final."""
+    b = []
+    for i, m in enumerate(_R32_LEFT):
+        b.append(_box(1, 2 * i + 1, 2, _r32_inner(m, gpos, thirds_in), _RC["R32"], cls="r32"))
+    for i, m in enumerate(_R32_RIGHT):
+        b.append(_box(9, 2 * i + 1, 2, _r32_inner(m, gpos, thirds_in), _RC["R32"], cls="r32"))
+    for j, (n, a, c) in enumerate(_TREE_R16[:4]):
+        b.append(_box(2, 4 * j + 1, 4, _ko_inner(n, a, c, _RC["R16"]), _RC["R16"], cls="r16", fed="fedL"))
+    for j, (n, a, c) in enumerate(_TREE_R16[4:]):
+        b.append(_box(8, 4 * j + 1, 4, _ko_inner(n, a, c, _RC["R16"]), _RC["R16"], cls="r16", fed="fedR"))
+    for k, (n, a, c) in enumerate(_TREE_QF[:2]):
+        b.append(_box(3, 8 * k + 1, 8, _ko_inner(n, a, c, _RC["QF"]), _RC["QF"], cls="qf", fed="fedL"))
+    for k, (n, a, c) in enumerate(_TREE_QF[2:]):
+        b.append(_box(7, 8 * k + 1, 8, _ko_inner(n, a, c, _RC["QF"]), _RC["QF"], cls="qf", fed="fedR"))
+    b.append(_box(4, 1, 16, _ko_inner(101, 97, 98, _RC["SF"]), _RC["SF"], cls="sf", fed="fedL"))
+    b.append(_box(6, 1, 16, _ko_inner(102, 99, 100, _RC["SF"]), _RC["SF"], cls="sf", fed="fedR"))
+    # centre column: champion · Final (centred at row 8.5 to meet both SF lines) · 3rd place
+    b.append(f'<div class="champ" style="grid-column:5;grid-row:4/span 2">'
+             f'<span class="trophy">★</span>CHAMPION</div>')
+    b.append(_box(5, 7, 4, _ko_inner(104, 101, 102, _RC["F"]), _RC["F"], cls="fin", fed="fedC"))
+    b.append(_box(5, 12, 3, _ko_inner(103, 101, 102, _RC["3P"], prefix="L"), _RC["3P"], cls="third"))
+    return "".join(b)
+
+
+def _round_timeline() -> str:
+    segs = [("Group stage", "#1f3a5f", "Jun 11–27"), ("Round of 32", _RC["R32"], "Jun 28–Jul 3"),
+            ("Round of 16", _RC["R16"], "Jul 4–7"), ("Quarter-finals", _RC["QF"], "Jul 9–11"),
+            ("Semi-finals", _RC["SF"], "Jul 14–15"), ("3rd place", _RC["3P"], "Jul 18"),
+            ("Final", _RC["F"], "Jul 19")]
+    return "".join(
+        f'<span class="tl"><span class="tlsw" style="background:{c}"></span>'
+        f'<span class="tln">{n}</span> <span class="tld">{d}</span></span>'
+        for n, c, d in segs)
 
 
 def build_bracket_page(conn: sqlite3.Connection, today=None) -> str:
     if today is None:
         today = datetime.now(CUTOFF_TZ).date()
-    teams = _bracket_teams(conn)
+    gpos = _group_positions(conn)
     thirds_in = _thirds_in_top8(conn)
-    left = "".join(_r32_card(m, teams, thirds_in) for m in _R32_LEFT)
-    right = "".join(_r32_card(m, teams, thirds_in) for m in _R32_RIGHT)
     played = conn.execute("SELECT COUNT(*) FROM fixture WHERE is_finished=1").fetchone()[0]
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <style>{_CSS}{_BRACKET_CSS}</style></head><body>
 <div class="page">
   <header>
     <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
-    <div class="title">Knockout Bracket — Projected Round of 32</div>
-    <div class="meta">{played}/72 played · slots fill as groups clinch</div>
+    <div class="title">Knockout Bracket — Path to the Final</div>
+    <div class="meta">{played}/72 played · winners feed the next match by number</div>
   </header>
   <div class="blegend">
-    <span><span class="g lock">✓</span> won group</span>
-    <span><span class="g in">●</span> through (top 2)</span>
-    <span><span class="g proj">·</span> projected</span>
-    <span><span class="g out">×</span> out of top 2</span>
-    <span class="bk">3rd-place slots assigned by FIFA once the 8 best 3rds are known · chips = current top-8 thirds</span>
+    <div class="tlrow">{_round_timeline()}</div>
+    <div class="bkey"><span class="kd"><b>1st A ✓</b> locked</span>
+      <span class="kd"><span class="ac lead">USA<b>6</b><i>(+5)</i></span> leader if open</span>
+      <span class="kd">array = current top 3 (code · pts · GD) — no team placed until its spot is mathematically settled</span></div>
   </div>
   <div class="bbody">
-    <div class="bcol">{left}</div>
-    <div class="bfunnel">{_funnel()}</div>
-    <div class="bcol">{right}</div>
+    <div class="bracket">{_bracket_grid(gpos, thirds_in)}</div>
   </div>
-  <footer>R32 template &amp; tree from world-cup-2026.html · teams from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
+  <footer>R32 template &amp; tree from world-cup-2026.html · standings/clinch from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
 </div></body></html>"""
 
 
@@ -804,58 +858,58 @@ _KNOCKOUT_CSS = """
 """
 
 
-# Bracket page CSS (R32 cards left/right + central round funnel).
+# Bracket page CSS — a true converging tree (CSS grid + pseudo-element connectors),
+# round-coloured to match the calendar timeline.
 _BRACKET_CSS = """
-.blegend { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:4px 16px;
-           background:#f4f6f8; border-bottom:1px solid #e3e7eb; color:#37474f; font-size:9px; }
-.blegend .g { display:inline-block; width:14px; text-align:center; font-weight:800; }
-.blegend .g.lock { color:#9a7b15; } .blegend .g.in { color:#2E7D32; }
-.blegend .g.proj { color:#90A4AE; } .blegend .g.out { color:#c0504d; }
-.blegend .bk { margin-left:auto; color:#78909c; }
-.bbody { flex:1; display:flex; gap:10px; padding:7px 14px; overflow:hidden; }
-.bcol { width:2.95in; flex:0 0 auto; display:flex; flex-direction:column; justify-content:space-between; }
-.bcard { border:1px solid #e3e7eb; border-radius:5px; overflow:hidden; background:#fff;
-         box-shadow:0 1px 1px rgba(0,0,0,.03); }
-.bch { display:flex; justify-content:space-between; align-items:center; background:#f1f4f7;
-       padding:1px 6px; font-size:8px; color:#607d8b; border-bottom:1px solid #eceff1; }
-.bch b { color:""" + NAVY + """; font-size:9px; }
-.bslot { display:flex; align-items:center; gap:5px; padding:2.5px 6px; font-size:11px;
-         border-bottom:1px solid #f4f6f8; }
-.bslot:last-child { border-bottom:none; }
-.bslot .blg { width:15px; height:15px; object-fit:contain; flex:0 0 auto; }
-.bslot .bcode { font-weight:800; width:34px; flex:0 0 auto; }
-.bslot .bset { color:#90a4ae; font-size:8.5px; flex:1; white-space:nowrap;
-               overflow:hidden; text-overflow:ellipsis; }
-.bslot .bpts { font-size:9px; color:#546e7a; flex:0 0 auto; }
-.bslot .bpts i { color:#b0bec5; font-style:normal; margin-left:2px; }
-.bslot .bglyph { width:13px; text-align:center; font-weight:800; flex:0 0 auto; }
-.bslot.lock { background:#FFFBEF; } .bslot.lock .bglyph { color:#9a7b15; }
-.bslot.in { background:#F3FAF4; } .bslot.in .bglyph { color:#2E7D32; }
-.bslot.proj .bglyph { color:#b0bec5; }
-.bslot.out .bcode, .bslot.out .bset { color:#b0a0a0; } .bslot.out .bglyph { color:#c0504d; }
-.bslot.tbd { background:#fafbfc; }
-.bslot.tbd .bteam { font-weight:700; color:#78909c; width:auto; flex:0 0 auto; }
-.bslot.tbd .bset { flex:0 0 auto; color:#9aa7b0; font-weight:700; letter-spacing:.3px; }
-.bslot.tbd .cands { display:flex; gap:2px; margin-left:auto; flex:0 0 auto; }
-.bslot.tbd .cch { font-size:8px; font-weight:700; color:#2E7D32; background:#E8F5E9;
-                  border-radius:6px; padding:0 4px; }
-.bfunnel { flex:1; display:flex; flex-direction:column; justify-content:center; gap:16px;
-           padding:6px 6px; min-width:0; position:relative; }
-.bfunnel::before { content:""; position:absolute; top:8%; bottom:8%; left:50%; width:2px;
-                   transform:translateX(-50%); background:linear-gradient(#e3e7eb,#e9e2c4); z-index:0; }
-.frow { text-align:center; position:relative; z-index:1; }
-.frow .flab { display:block; font-size:9.5px; font-weight:800; color:""" + NAVY + """;
-              text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
-.frow.fin .flab { color:#b8860b; font-size:11px; }
-.fchips { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:3px; }
-.fch { display:inline-flex; flex-direction:column; align-items:center; line-height:1.18;
-       border:1px solid #dfe3e8; border-radius:5px; padding:3px 9px; background:#fff;
-       box-shadow:0 1px 1px rgba(0,0,0,.03); min-width:52px; }
-.fch b { font-size:9.5px; color:""" + NAVY + """; }
-.fch .ff { font-size:7.5px; color:#9aa7b0; }
-.frow.fin .fch { border-color:""" + GOLD + """; background:#FFFBEF; padding:6px 16px; }
-.frow.fin .fch b { font-size:12px; color:#b8860b; }
-.frow.fin .fch .ff { font-size:8.5px; }
+.blegend { padding:4px 14px; background:#f4f6f8; border-bottom:1px solid #e3e7eb; }
+.tlrow { display:flex; flex-wrap:wrap; align-items:center; gap:3px 13px; }
+.tl { display:inline-flex; align-items:center; gap:4px; font-size:8.5px; color:#37474f; }
+.tlsw { width:11px; height:11px; border-radius:2px; flex:0 0 auto; }
+.tl .tln { font-weight:700; } .tl .tld { color:#90a4ae; }
+.bkey { display:flex; flex-wrap:wrap; gap:3px 14px; margin-top:3px; font-size:8px; color:#78909c; }
+.bkey .kd { display:inline-flex; align-items:center; gap:4px; }
+.bbody { flex:1; padding:6px 12px 4px; overflow:hidden; }
+.bracket { height:100%; display:grid; column-gap:9px; row-gap:0;
+           grid-template-columns:1.92in .9in .8in .78in .98in .78in .8in .9in 1.92in;
+           grid-template-rows:repeat(16,1fr); --g:9px; }
+.cell { position:relative; height:100%; display:flex; align-items:center; }
+.mtch { width:100%; border:1px solid #dde2e7; border-radius:4px;
+        background:#fff; box-shadow:0 1px 1px rgba(0,0,0,.03); overflow:hidden; font-size:9px; }
+.mhd { display:flex; justify-content:space-between; align-items:center; gap:3px; color:#fff;
+       padding:0 4px; font-size:7px; line-height:1.5; }
+.mhd b { font-size:8px; } .mhd span { opacity:.92; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* R32 slots: locked team or contender array */
+.slot { display:flex; align-items:center; gap:3px; padding:1.5px 4px; min-height:15px;
+        border-top:1px solid #f0f2f4; }
+.slot:first-of-type { border-top:none; }
+.slot .slab { font-size:7px; color:#90a4ae; font-weight:700; flex:0 0 auto; white-space:nowrap; }
+.slot.open .slab { width:24px; }
+.slot.s3 .slab { color:#7b5ea7; } .slot.s3 .sset { font-size:7px; color:#9aa7b0; font-weight:700; flex:0 0 auto; }
+.slot.lock { background:#FFFBEF; }
+.slot.lock .sflag { width:14px; height:14px; object-fit:contain; flex:0 0 auto; }
+.slot.lock .scode { font-weight:800; font-size:10px; }
+.slot.lock .slab { color:#9a7b15; margin-left:auto; }
+.arr { display:flex; gap:3px; flex:1; justify-content:flex-end; overflow:hidden; }
+.ac { font-size:7.5px; color:#607d8b; white-space:nowrap; }
+.ac b { color:#37474f; margin-left:1px; } .ac i { color:#b0bec5; font-style:normal; margin-left:0; }
+.ac.lead { color:#0B1F3A; font-weight:700; } .ac.lead b { color:#0B1F3A; }
+/* knockout boxes */
+.koft { text-align:center; font-size:8.5px; color:#546e7a; padding:2px 2px; font-weight:700; }
+.koft em { color:#b0bec5; font-style:normal; font-weight:400; margin:0 2px; }
+.mtch.fin { border-color:""" + GOLD + """; } .mtch.fin .koft { font-size:9.5px; color:#9a7b15; }
+.mtch.third .koft { color:#7b5ea7; }
+.champ { grid-column:5; align-self:end; text-align:center; font-weight:800; font-size:10px;
+         color:#9a7b15; letter-spacing:1px; }
+.champ .trophy { display:block; font-size:15px; color:""" + GOLD + """; }
+/* connectors: each fed cell draws a bracket into the gap toward its two feeders,
+   whose centres sit at the cell's 25% and 75% points */
+.cell.fedL::before, .cell.fedR::before { content:""; position:absolute; box-sizing:border-box;
+        width:var(--g); top:25%; height:50%; border:1.4px solid var(--rc); }
+.cell.fedL::before { right:100%; border-left:none; }
+.cell.fedR::before { left:100%; border-right:none; }
+.cell.fedC::before, .cell.fedC::after { content:""; position:absolute; top:50%; width:var(--g);
+        border-top:1.4px solid #c9b063; }
+.cell.fedC::before { right:100%; } .cell.fedC::after { left:100%; }
 """
 
 
