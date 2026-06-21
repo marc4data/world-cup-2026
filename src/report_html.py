@@ -39,12 +39,14 @@ def load_matches(conn: sqlite3.Connection) -> list[sqlite3.Row]:
                ta.code AS ac, ta.name AS an, ta.logo AS alogo,
                p.pct_home, p.pct_away, p.predicted_winner_name,
                f.fifa_match_centre_url, f.espn_summary_url,
-               w.temp_c, w.code AS wcode, w.summary AS wsummary, w.is_forecast AS wforecast
+               w.temp_c, w.code AS wcode, w.summary AS wsummary, w.is_forecast AS wforecast,
+               v.city AS vcity
         FROM fixture f
         JOIN team th ON th.team_id = f.home_team_id
         JOIN team ta ON ta.team_id = f.away_team_id
         LEFT JOIN prediction p ON p.fixture_id = f.fixture_id
         LEFT JOIN weather w ON w.fixture_id = f.fixture_id
+        LEFT JOIN venue v ON v.venue_id = f.venue_id
         WHERE f.group_label IS NOT NULL
         ORDER BY f.kickoff_utc, f.fifa_match_num
         """).fetchall()
@@ -104,6 +106,46 @@ _WMO = {
 }
 
 
+# Fixed 16-venue lookup: host city -> (short code, friendly metro). US codes are
+# the 2-letter state (+ index where a state hosts >1 venue: CA1/CA2, TX1/TX2);
+# Canada/Mexico use the 3-char country + index. Drives the row badge + legend.
+_VENUE_META = {
+    # United States
+    "East Rutherford": ("NJ",   "New York / NJ"),
+    "Inglewood":       ("CA1",  "Los Angeles"),
+    "Santa Clara":     ("CA2",  "SF Bay Area"),
+    "Arlington":       ("TX1",  "Dallas"),
+    "Houston":         ("TX2",  "Houston"),
+    "Atlanta":         ("GA",   "Atlanta"),
+    "Kansas City":     ("MO",   "Kansas City"),
+    "Miami Gardens":   ("FL",   "Miami"),
+    "Foxborough":      ("MA",   "Boston"),
+    "Philadelphia":    ("PA",   "Philadelphia"),
+    "Seattle":         ("WA",   "Seattle"),
+    # Canada / Mexico
+    "Toronto":         ("CAN1", "Toronto"),
+    "Vancouver":       ("CAN2", "Vancouver"),
+    "Mexico City":     ("MEX1", "Mexico City"),
+    "Guadalajara":     ("MEX2", "Guadalajara"),
+    "Monterrey":       ("MEX3", "Monterrey"),
+}
+
+
+def _venue_badge(m) -> str:
+    """Short host-venue code (e.g. CA1, TX2, MEX1); full metro in the tooltip."""
+    code, metro = _VENUE_META.get(m["vcity"], ("", ""))
+    if not code:
+        return '<span class="ven"></span>'
+    return f'<span class="ven" title="{html.escape(metro)}">{code}</span>'
+
+
+def _venue_legend() -> str:
+    items = "".join(
+        f'<span class="vl"><b>{code}</b> {html.escape(metro)}</span>'
+        for code, metro in _VENUE_META.values())
+    return f'<div class="vlegend"><span class="vlh">Venues</span>{items}</div>'
+
+
 def _wx_cell(m) -> str:
     """Compact weather: icon (abbreviated summary) + temperature in °F."""
     t = m["temp_c"]
@@ -127,7 +169,7 @@ def _match_row(m, today) -> str:
     href = m["fifa_match_centre_url"] or m["espn_summary_url"] or "#"
     return (f'<a class="fx" href="{html.escape(href)}" target="_blank">'
             f'<span class="t">{t}</span>{grp}{home}{_result_cell(m)}{away}'
-            f'{_wx_cell(m)}</a>')
+            f'{_venue_badge(m)}{_wx_cell(m)}</a>')
 
 
 def _qual_watch(conn) -> dict[str, list[str]]:
@@ -234,6 +276,7 @@ def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
     <div class="schedule">{blocks}</div>
     {_sidebar(conn, matches, today)}
   </div>
+  {_venue_legend()}
   <footer>Generated from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
 </div></body></html>"""
 
@@ -308,6 +351,7 @@ def build_groups_page(conn: sqlite3.Connection, today=None) -> str:
     <div class="gtables">{tables}</div>
     <div class="gsched">{blocks}</div>
   </div>
+  {_venue_legend()}
   <footer>Generated from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
 </div></body></html>"""
 
@@ -686,9 +730,16 @@ header .meta { font-size:9.5px; opacity:.8; }
 .fx .score { width:40px; text-align:center; font-weight:800; flex:0 0 auto; }
 .fx .proj { width:40px; text-align:center; color:#0D47A1; font-size:9px; flex:0 0 auto; }
 .fx .vs { width:40px; text-align:center; color:#b0bec5; flex:0 0 auto; }
-.fx .wx { width:46px; text-align:right; color:#607d8b; font-size:9px; flex:0 0 auto;
+.fx .ven { min-width:23px; text-align:center; color:#5a6b7a; font-size:8px; font-weight:700;
+           background:#eef1f4; border-radius:3px; padding:0 2px; flex:0 0 auto; letter-spacing:.2px; }
+.fx .wx { width:44px; text-align:right; color:#607d8b; font-size:9px; flex:0 0 auto;
           white-space:nowrap; }
 .fx .wx .wi { margin-right:2px; font-size:10px; }
+.vlegend { display:flex; flex-wrap:wrap; align-items:center; gap:2px 9px; padding:4px 16px;
+           border-top:1px solid #eceff1; background:#fafbfc; font-size:7.5px; color:#546e7a; }
+.vlegend .vlh { font-weight:800; color:""" + NAVY + """; text-transform:uppercase;
+                letter-spacing:.5px; margin-right:3px; }
+.vlegend .vl b { color:""" + NAVY + """; font-weight:800; }
 footer { font-size:8px; color:#90a4ae; padding:3px 16px; border-top:1px solid #eceff1; text-align:right; }
 """
 
