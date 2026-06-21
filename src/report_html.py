@@ -38,11 +38,13 @@ def load_matches(conn: sqlite3.Connection) -> list[sqlite3.Row]:
                th.code AS hc, th.name AS hn, th.logo AS hlogo,
                ta.code AS ac, ta.name AS an, ta.logo AS alogo,
                p.pct_home, p.pct_away, p.predicted_winner_name,
-               f.fifa_match_centre_url, f.espn_summary_url
+               f.fifa_match_centre_url, f.espn_summary_url,
+               w.temp_c, w.code AS wcode, w.summary AS wsummary, w.is_forecast AS wforecast
         FROM fixture f
         JOIN team th ON th.team_id = f.home_team_id
         JOIN team ta ON ta.team_id = f.away_team_id
         LEFT JOIN prediction p ON p.fixture_id = f.fixture_id
+        LEFT JOIN weather w ON w.fixture_id = f.fixture_id
         WHERE f.group_label IS NOT NULL
         ORDER BY f.kickoff_utc, f.fifa_match_num
         """).fetchall()
@@ -85,6 +87,35 @@ def _team_cell(code, name, logo, side, *, winner_side, finished, align) -> str:
     return f'<span class="{cls}" title="{html.escape(name or "")}"><span class="pick">{inner}</span></span>'
 
 
+# WMO weather code -> (icon, short label). Icon is the abbreviated summary; the
+# full label rides in the cell's tooltip. Open-Meteo codes (only a subset occurs
+# at WC venues in summer, but the map is complete for robustness).
+_WMO = {
+    0: ("☀", "Clear"), 1: ("🌤", "Mainly clear"), 2: ("⛅", "Partly cloudy"),
+    3: ("☁", "Overcast"), 45: ("🌫", "Fog"), 48: ("🌫", "Rime fog"),
+    51: ("🌦", "Lt drizzle"), 53: ("🌦", "Drizzle"), 55: ("🌧", "Hvy drizzle"),
+    56: ("🌧", "Frz drizzle"), 57: ("🌧", "Frz drizzle"),
+    61: ("🌦", "Lt rain"), 63: ("🌧", "Rain"), 65: ("🌧", "Hvy rain"),
+    66: ("🌧", "Frz rain"), 67: ("🌧", "Frz rain"),
+    71: ("🌨", "Lt snow"), 73: ("🌨", "Snow"), 75: ("🌨", "Hvy snow"), 77: ("🌨", "Snow grains"),
+    80: ("🌦", "Showers"), 81: ("🌧", "Showers"), 82: ("⛈", "Hvy showers"),
+    85: ("🌨", "Snow showers"), 86: ("🌨", "Snow showers"),
+    95: ("⛈", "Thunderstorm"), 96: ("⛈", "Storm+hail"), 99: ("⛈", "Storm+hail"),
+}
+
+
+def _wx_cell(m) -> str:
+    """Compact weather: icon (abbreviated summary) + temperature in °F."""
+    t = m["temp_c"]
+    if t is None:
+        return '<span class="wx"></span>'
+    f = round(t * 9 / 5 + 32)
+    icon, label = _WMO.get(m["wcode"], ("•", (m["wsummary"] or "").strip() or "—"))
+    tip = f'{label} · {f}°F' + (" (forecast)" if m["wforecast"] else "")
+    return (f'<span class="wx" title="{html.escape(tip)}">'
+            f'<span class="wi">{icon}</span>{f}°</span>')
+
+
 def _match_row(m, today) -> str:
     g = m["group_label"]
     grp = f'<span class="grp" title="{g}">{g[-1]}</span>'
@@ -94,10 +125,9 @@ def _match_row(m, today) -> str:
     home = _team_cell(m["hc"], m["hn"], m["hlogo"], "home", winner_side=ws, finished=fin, align="home")
     away = _team_cell(m["ac"], m["an"], m["alogo"], "away", winner_side=ws, finished=fin, align="away")
     href = m["fifa_match_centre_url"] or m["espn_summary_url"] or "#"
-    num = f'#{m["fifa_match_num"]}' if m["fifa_match_num"] else ""
     return (f'<a class="fx" href="{html.escape(href)}" target="_blank">'
             f'<span class="t">{t}</span>{grp}{home}{_result_cell(m)}{away}'
-            f'<span class="num">{num}</span></a>')
+            f'{_wx_cell(m)}</a>')
 
 
 def _qual_watch(conn) -> dict[str, list[str]]:
@@ -197,9 +227,9 @@ def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
   <header>
     <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
     <div class="title">Group-Stage Schedule — 72 Matches</div>
-    <div class="meta">{played}/72 played · times Pacific · click a match → FIFA match-centre</div>
+    <div class="meta">{played}/72 played · times Pacific · weather °F · click a match → FIFA match-centre</div>
   </header>
-  <div class="legend"><span class="lgrp">A–L = group</span><span class="key"><span class="kpick">outlined</span> = winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
+  <div class="legend"><span class="lgrp">A–L = group</span><span class="key"><span class="kpick">outlined</span> = winner / projected favourite · <span class="proj">%</span>=win prob · weather icon + °F</span></div>
   <div class="body">
     <div class="schedule">{blocks}</div>
     {_sidebar(conn, matches, today)}
@@ -270,7 +300,7 @@ def build_groups_page(conn: sqlite3.Connection, today=None) -> str:
   <header>
     <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
     <div class="title">Groups — Standings &amp; Schedule</div>
-    <div class="meta">{played}/72 played · top 2 advance (+ 8 best 3rd) · times Pacific</div>
+    <div class="meta">{played}/72 played · top 2 advance (+ 8 best 3rd) · times Pacific · weather °F</div>
   </header>
   <div class="legend"><span class="lgrp">gold = won group · grey = out of top 2</span>
     <span class="key"><span class="kpick">outlined</span> = winner / projected favourite · <span class="proj">%</span>=win prob</span></div>
@@ -656,7 +686,9 @@ header .meta { font-size:9.5px; opacity:.8; }
 .fx .score { width:40px; text-align:center; font-weight:800; flex:0 0 auto; }
 .fx .proj { width:40px; text-align:center; color:#0D47A1; font-size:9px; flex:0 0 auto; }
 .fx .vs { width:40px; text-align:center; color:#b0bec5; flex:0 0 auto; }
-.fx .num { width:22px; text-align:right; color:#b0bec5; font-size:8px; flex:0 0 auto; }
+.fx .wx { width:46px; text-align:right; color:#607d8b; font-size:9px; flex:0 0 auto;
+          white-space:nowrap; }
+.fx .wx .wi { margin-right:2px; font-size:10px; }
 footer { font-size:8px; color:#90a4ae; padding:3px 16px; border-top:1px solid #eceff1; text-align:right; }
 """
 
