@@ -542,16 +542,17 @@ _TREE_SF  = [(101, 97, 98), (102, 99, 100)]
 _TREE_FIN = (104, 101, 102)
 
 
-# Per-match date · venue for the knockout rounds (recovered from the source SVG).
+# Per-match (date, time, venue, venue-code) for the knockout rounds, recovered
+# from the source SVG. Codes match the schedule legend (US state / 3-char country).
 _KO_INFO = {
-    89: ("Jul 4", "Philadelphia"), 90: ("Jul 4", "Houston"),
-    93: ("Jul 6", "Arlington"),    94: ("Jul 6", "Seattle"),
-    91: ("Jul 5", "New Jersey"),   92: ("Jul 5", "Mexico City"),
-    95: ("Jul 7", "Atlanta"),      96: ("Jul 7", "Vancouver"),
-    97: ("Jul 9", "Foxborough"),   98: ("Jul 10", "Los Angeles"),
-    99: ("Jul 11", "Miami"),       100: ("Jul 11", "Kansas City"),
-    101: ("Jul 14", "Arlington"),  102: ("Jul 15", "Atlanta"),
-    103: ("Jul 18", "Miami"),      104: ("Jul 19", "New Jersey"),
+    89: ("Jul 4", "2:00pm", "Philadelphia", "PA"),  90: ("Jul 4", "10:00am", "Houston", "TX2"),
+    93: ("Jul 6", "12:00pm", "Arlington", "TX1"),   94: ("Jul 6", "5:00pm", "Seattle", "WA"),
+    91: ("Jul 5", "1:00pm", "New Jersey", "NJ"),    92: ("Jul 5", "5:00pm", "Mexico City", "MEX1"),
+    95: ("Jul 7", "9:00am", "Atlanta", "GA"),       96: ("Jul 7", "1:00pm", "Vancouver", "CAN2"),
+    97: ("Jul 9", "1:00pm", "Foxborough", "MA"),    98: ("Jul 10", "12:00pm", "Los Angeles", "CA1"),
+    99: ("Jul 11", "2:00pm", "Miami", "FL"),        100: ("Jul 11", "6:00pm", "Kansas City", "MO"),
+    101: ("Jul 14", "12:00pm", "Arlington", "TX1"), 102: ("Jul 15", "12:00pm", "Atlanta", "GA"),
+    103: ("Jul 18", "TBD", "Miami", "FL"),          104: ("Jul 19", "12:00pm", "New Jersey", "NJ"),
 }
 # Round colours — matched to the calendar bands (_ROUND_BANDS) so the same hue
 # means the same round on the timeline legend and across the bracket.
@@ -600,6 +601,7 @@ def _thirds_in_top8(conn) -> set:
 
 
 def _arr_cell(r, *, lead) -> str:
+    # Only the team likely to take the slot gets its PTS bolded (`lead`).
     gd = f'({r["gd"]:+d})' if r["gd"] is not None else ""
     return (f'<span class="ac{" lead" if lead else ""}">{html.escape(r["code"])}'
             f'<b>{r["pts"]}</b><i>{gd}</i></span>')
@@ -608,14 +610,9 @@ def _arr_cell(r, *, lead) -> str:
 def _slot(feeder, gpos, thirds_in) -> str:
     """One R32 feeder: a locked team if mathematically settled, else the array."""
     kind, key = feeder
-    if kind == "3":                         # 3rd-place set — never assigned yet
-        cands = [gpos[g]["rows"][2] for g in key.split("/")
-                 if g in gpos and len(gpos[g]["rows"]) > 2 and g in thirds_in]
-        cands.sort(key=lambda r: (-(r["pts"] or 0), -(r["gd"] or 0)))
-        chips = "".join(_arr_cell(r, lead=False) for r in cands[:3])
-        return (f'<div class="slot s3"><span class="slab" style="color:{_RC["3P"]}">3rd</span>'
-                f'<span class="sset">{html.escape(key)}</span>'
-                f'<span class="arr">{chips}</span></div>')
+    if kind == "3":   # 3rd-place set — too many/too uncertain to name, show the set only
+        return (f'<div class="slot s3"><span class="slab">3rd place</span>'
+                f'<span class="sset">from {html.escape(key)}</span></div>')
     g, pos = key, (1 if kind == "W" else 2)
     gp = gpos.get(g, {"rows": [], "lock": {}})
     lab = ("1st " if kind == "W" else "2nd ") + g
@@ -638,11 +635,15 @@ def _r32_inner(match, gpos, thirds_in) -> str:
             f'{_slot(top, gpos, thirds_in)}{_slot(bot, gpos, thirds_in)}')
 
 
-def _ko_inner(num, a, b, rc, *, prefix="W") -> str:
-    date, venue = _KO_INFO.get(num, ("", ""))
+def _ko_inner(num, rc, *, big=False, title="") -> str:
+    """Knockout box: date · time · location (no feeder labels — the lines show that)."""
+    date, time, venue, code = _KO_INFO.get(num, ("", "", "", ""))
+    loc = venue if big else code
+    line2 = " · ".join(x for x in (time, loc) if x)
+    head = f'<div class="kotitle">{title}</div>' if title else ""
     return (f'<div class="mhd" style="background:{rc}"><b>M{num}</b>'
-            f'<span>{html.escape(date)} · {html.escape(venue)}</span></div>'
-            f'<div class="koft">{prefix}{a} <em>v</em> {prefix}{b}</div>')
+            f'<span>{html.escape(date)}</span></div>{head}'
+            f'<div class="kowhen">{html.escape(line2)}</div>')
 
 
 def _box(col, rs, span, inner, rc, *, cls="", fed="") -> str:
@@ -661,20 +662,21 @@ def _bracket_grid(gpos, thirds_in) -> str:
     for i, m in enumerate(_R32_RIGHT):
         b.append(_box(9, 2 * i + 1, 2, _r32_inner(m, gpos, thirds_in), _RC["R32"], cls="r32"))
     for j, (n, a, c) in enumerate(_TREE_R16[:4]):
-        b.append(_box(2, 4 * j + 1, 4, _ko_inner(n, a, c, _RC["R16"]), _RC["R16"], cls="r16", fed="fedL"))
+        b.append(_box(2, 4 * j + 1, 4, _ko_inner(n, _RC["R16"]), _RC["R16"], cls="r16", fed="fedL"))
     for j, (n, a, c) in enumerate(_TREE_R16[4:]):
-        b.append(_box(8, 4 * j + 1, 4, _ko_inner(n, a, c, _RC["R16"]), _RC["R16"], cls="r16", fed="fedR"))
+        b.append(_box(8, 4 * j + 1, 4, _ko_inner(n, _RC["R16"]), _RC["R16"], cls="r16", fed="fedR"))
     for k, (n, a, c) in enumerate(_TREE_QF[:2]):
-        b.append(_box(3, 8 * k + 1, 8, _ko_inner(n, a, c, _RC["QF"]), _RC["QF"], cls="qf", fed="fedL"))
+        b.append(_box(3, 8 * k + 1, 8, _ko_inner(n, _RC["QF"]), _RC["QF"], cls="qf", fed="fedL"))
     for k, (n, a, c) in enumerate(_TREE_QF[2:]):
-        b.append(_box(7, 8 * k + 1, 8, _ko_inner(n, a, c, _RC["QF"]), _RC["QF"], cls="qf", fed="fedR"))
-    b.append(_box(4, 1, 16, _ko_inner(101, 97, 98, _RC["SF"]), _RC["SF"], cls="sf", fed="fedL"))
-    b.append(_box(6, 1, 16, _ko_inner(102, 99, 100, _RC["SF"]), _RC["SF"], cls="sf", fed="fedR"))
-    # centre column: champion · Final (centred at row 8.5 to meet both SF lines) · 3rd place
-    b.append(f'<div class="champ" style="grid-column:5;grid-row:4/span 2">'
+        b.append(_box(7, 8 * k + 1, 8, _ko_inner(n, _RC["QF"]), _RC["QF"], cls="qf", fed="fedR"))
+    b.append(_box(4, 1, 16, _ko_inner(101, _RC["SF"], title="SEMI-FINAL"), _RC["SF"], cls="sf", fed="fedL"))
+    b.append(_box(6, 1, 16, _ko_inner(102, _RC["SF"], title="SEMI-FINAL"), _RC["SF"], cls="sf", fed="fedR"))
+    # centre column (wide): Final + Champion + 3rd place pulled out of the line and
+    # given room — their role is obvious, so they show full date · time · location.
+    b.append(f'<div class="champ" style="grid-column:5;grid-row:1/span 3">'
              f'<span class="trophy">★</span>CHAMPION</div>')
-    b.append(_box(5, 7, 4, _ko_inner(104, 101, 102, _RC["F"]), _RC["F"], cls="fin", fed="fedC"))
-    b.append(_box(5, 12, 3, _ko_inner(103, 101, 102, _RC["3P"], prefix="L"), _RC["3P"], cls="third"))
+    b.append(_box(5, 6, 6, _ko_inner(104, _RC["F"], big=True, title="FINAL"), _RC["F"], cls="fin big", fed="fedC"))
+    b.append(_box(5, 12, 4, _ko_inner(103, _RC["3P"], big=True, title="3RD PLACE"), _RC["3P"], cls="third big"))
     return "".join(b)
 
 
@@ -868,10 +870,10 @@ _BRACKET_CSS = """
 .tl .tln { font-weight:700; } .tl .tld { color:#90a4ae; }
 .bkey { display:flex; flex-wrap:wrap; gap:3px 14px; margin-top:3px; font-size:9px; color:#78909c; }
 .bkey .kd { display:inline-flex; align-items:center; gap:4px; }
-.bbody { flex:1; padding:6px 11px 4px; overflow:hidden; }
-.bracket { height:100%; display:grid; column-gap:8px; row-gap:0;
-           grid-template-columns:2.08in .82in .72in .72in .9in .72in .72in .82in 2.08in;
-           grid-template-rows:repeat(16,1fr); --g:8px; }
+.bbody { flex:1; padding:6px 10px 4px; overflow:hidden; }
+.bracket { height:100%; display:grid; column-gap:6px; row-gap:0;
+           grid-template-columns:1.74in .92in .88in .88in 1.44in .88in .88in .92in 1.74in;
+           grid-template-rows:repeat(16,1fr); --g:6px; }
 .cell { position:relative; height:100%; display:flex; align-items:center; }
 .mtch { width:100%; border:1px solid #dde2e7; border-radius:4px;
         background:#fff; box-shadow:0 1px 1px rgba(0,0,0,.03); overflow:hidden; font-size:10.5px; }
@@ -882,25 +884,29 @@ _BRACKET_CSS = """
 .slot { display:flex; align-items:center; gap:3px; padding:2px 5px; min-height:18px;
         border-top:1px solid #f0f2f4; }
 .slot:first-of-type { border-top:none; }
-.slot .slab { font-size:8.5px; color:#90a4ae; font-weight:700; flex:0 0 auto; white-space:nowrap; }
-.slot.open .slab { width:28px; }
-.slot.s3 .slab { color:#7b5ea7; } .slot.s3 .sset { font-size:8.5px; color:#9aa7b0; font-weight:700; flex:0 0 auto; }
+.slot .slab { font-size:8px; color:#90a4ae; font-weight:700; flex:0 0 auto; white-space:nowrap; }
+.slot.open .slab { width:26px; }
+.slot.s3 .slab { color:#7b5ea7; } .slot.s3 .sset { font-size:8px; color:#b0b8c0; font-style:italic; flex:0 0 auto; margin-left:3px; }
 .slot.lock { background:#FFFBEF; }
 .slot.lock .sflag { width:17px; height:17px; object-fit:contain; flex:0 0 auto; }
 .slot.lock .scode { font-weight:800; font-size:13px; }
 .slot.lock .slab { color:#9a7b15; margin-left:auto; }
-.arr { display:flex; gap:4px; flex:1; justify-content:flex-end; overflow:hidden; }
-.ac { font-size:9px; color:#607d8b; white-space:nowrap; }
-.ac b { color:#37474f; margin-left:1px; } .ac i { color:#b0bec5; font-style:normal; margin-left:0; font-size:8px; }
-.ac.lead { color:#0B1F3A; font-weight:700; } .ac.lead b { color:#0B1F3A; }
-/* knockout boxes */
-.koft { text-align:center; font-size:10.5px; color:#546e7a; padding:2.5px 2px; font-weight:700; }
-.koft em { color:#b0bec5; font-style:normal; font-weight:400; margin:0 2px; }
-.mtch.fin { border-color:""" + GOLD + """; } .mtch.fin .koft { font-size:12px; color:#9a7b15; }
-.mtch.third .koft { color:#7b5ea7; }
-.champ { grid-column:5; align-self:end; text-align:center; font-weight:800; font-size:13px;
-         color:#9a7b15; letter-spacing:1px; }
-.champ .trophy { display:block; font-size:20px; color:""" + GOLD + """; }
+.arr { display:flex; gap:3px; flex:1; justify-content:flex-end; overflow:hidden; }
+.ac { font-size:8.5px; color:#7e8a94; white-space:nowrap; }
+.ac b { font-weight:400; color:#7e8a94; margin-left:1px; } .ac i { color:#c2c9cf; font-style:normal; font-size:7.5px; }
+.ac.lead { color:#37474f; } .ac.lead b { font-weight:800; color:#0B1F3A; }
+/* knockout boxes: date · time · location (lines convey the feeders) */
+.kowhen { text-align:center; font-size:9.5px; color:#37474f; padding:2px 3px 2.5px; font-weight:600; white-space:nowrap; }
+.kotitle { text-align:center; font-size:7.5px; font-weight:800; letter-spacing:.6px; color:#90a4ae;
+           padding-top:1.5px; text-transform:uppercase; }
+.mtch.big { box-shadow:0 1px 3px rgba(0,0,0,.10); }
+.mtch.big .kowhen { font-size:11px; padding:3px; }
+.mtch.fin { border:2px solid """ + GOLD + """; } .mtch.fin .kowhen { color:#9a7b15; font-weight:800; }
+.mtch.fin .kotitle { color:#b8860b; }
+.mtch.third { border-color:#c8b6df; } .mtch.third .kotitle { color:#7b5ea7; }
+.champ { grid-column:5; align-self:center; text-align:center; font-weight:800; font-size:13px;
+         color:#9a7b15; letter-spacing:1.5px; }
+.champ .trophy { display:block; font-size:22px; color:""" + GOLD + """; }
 /* connectors: each fed cell draws a bracket into the gap toward its two feeders,
    whose centres sit at the cell's 25% and 75% points */
 .cell.fedL::before, .cell.fedR::before { content:""; position:absolute; box-sizing:border-box;
