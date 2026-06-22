@@ -863,44 +863,44 @@ _KNOCKOUT_CSS = """
 _BRACKET_CSS = """
 .blegend { padding:4px 14px; background:#f4f6f8; border-bottom:1px solid #e3e7eb; }
 .tlrow { display:flex; flex-wrap:wrap; align-items:center; gap:3px 13px; }
-.tl { display:inline-flex; align-items:center; gap:4px; font-size:8.5px; color:#37474f; }
-.tlsw { width:11px; height:11px; border-radius:2px; flex:0 0 auto; }
+.tl { display:inline-flex; align-items:center; gap:4px; font-size:9.5px; color:#37474f; }
+.tlsw { width:12px; height:12px; border-radius:2px; flex:0 0 auto; }
 .tl .tln { font-weight:700; } .tl .tld { color:#90a4ae; }
-.bkey { display:flex; flex-wrap:wrap; gap:3px 14px; margin-top:3px; font-size:8px; color:#78909c; }
+.bkey { display:flex; flex-wrap:wrap; gap:3px 14px; margin-top:3px; font-size:9px; color:#78909c; }
 .bkey .kd { display:inline-flex; align-items:center; gap:4px; }
-.bbody { flex:1; padding:6px 12px 4px; overflow:hidden; }
-.bracket { height:100%; display:grid; column-gap:9px; row-gap:0;
-           grid-template-columns:1.92in .9in .8in .78in .98in .78in .8in .9in 1.92in;
-           grid-template-rows:repeat(16,1fr); --g:9px; }
+.bbody { flex:1; padding:6px 11px 4px; overflow:hidden; }
+.bracket { height:100%; display:grid; column-gap:8px; row-gap:0;
+           grid-template-columns:2.08in .82in .72in .72in .9in .72in .72in .82in 2.08in;
+           grid-template-rows:repeat(16,1fr); --g:8px; }
 .cell { position:relative; height:100%; display:flex; align-items:center; }
 .mtch { width:100%; border:1px solid #dde2e7; border-radius:4px;
-        background:#fff; box-shadow:0 1px 1px rgba(0,0,0,.03); overflow:hidden; font-size:9px; }
+        background:#fff; box-shadow:0 1px 1px rgba(0,0,0,.03); overflow:hidden; font-size:10.5px; }
 .mhd { display:flex; justify-content:space-between; align-items:center; gap:3px; color:#fff;
-       padding:0 4px; font-size:7px; line-height:1.5; }
-.mhd b { font-size:8px; } .mhd span { opacity:.92; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+       padding:1px 5px; font-size:8.5px; line-height:1.5; }
+.mhd b { font-size:9.5px; } .mhd span { opacity:.92; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 /* R32 slots: locked team or contender array */
-.slot { display:flex; align-items:center; gap:3px; padding:1.5px 4px; min-height:15px;
+.slot { display:flex; align-items:center; gap:3px; padding:2px 5px; min-height:18px;
         border-top:1px solid #f0f2f4; }
 .slot:first-of-type { border-top:none; }
-.slot .slab { font-size:7px; color:#90a4ae; font-weight:700; flex:0 0 auto; white-space:nowrap; }
-.slot.open .slab { width:24px; }
-.slot.s3 .slab { color:#7b5ea7; } .slot.s3 .sset { font-size:7px; color:#9aa7b0; font-weight:700; flex:0 0 auto; }
+.slot .slab { font-size:8.5px; color:#90a4ae; font-weight:700; flex:0 0 auto; white-space:nowrap; }
+.slot.open .slab { width:28px; }
+.slot.s3 .slab { color:#7b5ea7; } .slot.s3 .sset { font-size:8.5px; color:#9aa7b0; font-weight:700; flex:0 0 auto; }
 .slot.lock { background:#FFFBEF; }
-.slot.lock .sflag { width:14px; height:14px; object-fit:contain; flex:0 0 auto; }
-.slot.lock .scode { font-weight:800; font-size:10px; }
+.slot.lock .sflag { width:17px; height:17px; object-fit:contain; flex:0 0 auto; }
+.slot.lock .scode { font-weight:800; font-size:13px; }
 .slot.lock .slab { color:#9a7b15; margin-left:auto; }
-.arr { display:flex; gap:3px; flex:1; justify-content:flex-end; overflow:hidden; }
-.ac { font-size:7.5px; color:#607d8b; white-space:nowrap; }
-.ac b { color:#37474f; margin-left:1px; } .ac i { color:#b0bec5; font-style:normal; margin-left:0; }
+.arr { display:flex; gap:4px; flex:1; justify-content:flex-end; overflow:hidden; }
+.ac { font-size:9px; color:#607d8b; white-space:nowrap; }
+.ac b { color:#37474f; margin-left:1px; } .ac i { color:#b0bec5; font-style:normal; margin-left:0; font-size:8px; }
 .ac.lead { color:#0B1F3A; font-weight:700; } .ac.lead b { color:#0B1F3A; }
 /* knockout boxes */
-.koft { text-align:center; font-size:8.5px; color:#546e7a; padding:2px 2px; font-weight:700; }
+.koft { text-align:center; font-size:10.5px; color:#546e7a; padding:2.5px 2px; font-weight:700; }
 .koft em { color:#b0bec5; font-style:normal; font-weight:400; margin:0 2px; }
-.mtch.fin { border-color:""" + GOLD + """; } .mtch.fin .koft { font-size:9.5px; color:#9a7b15; }
+.mtch.fin { border-color:""" + GOLD + """; } .mtch.fin .koft { font-size:12px; color:#9a7b15; }
 .mtch.third .koft { color:#7b5ea7; }
-.champ { grid-column:5; align-self:end; text-align:center; font-weight:800; font-size:10px;
+.champ { grid-column:5; align-self:end; text-align:center; font-weight:800; font-size:13px;
          color:#9a7b15; letter-spacing:1px; }
-.champ .trophy { display:block; font-size:15px; color:""" + GOLD + """; }
+.champ .trophy { display:block; font-size:20px; color:""" + GOLD + """; }
 /* connectors: each fed cell draws a bracket into the gap toward its two feeders,
    whose centres sit at the cell's 25% and 75% points */
 .cell.fedL::before, .cell.fedR::before { content:""; position:absolute; box-sizing:border-box;
