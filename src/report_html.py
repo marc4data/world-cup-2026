@@ -654,30 +654,47 @@ def _box(col, rs, span, inner, rc, *, cls="", fed="") -> str:
             f'<div class="mtch {cls}">{inner}</div></div>')
 
 
+def _ctr(rs, span, inner, cls) -> str:
+    """A centre box spanning the two SF columns (4-5), stacked above the semis."""
+    return (f'<div class="ccell" style="grid-column:4/span 2;grid-row:{rs}/span {span}">'
+            f'<div class="mtch {cls}">{inner}</div></div>')
+
+
 def _bracket_grid(gpos, thirds_in) -> str:
-    """The full converging tree: R32 outer columns -> R16 -> QF -> SF -> Final."""
+    """Converging tree (8 cols): R32 -> R16 -> QF -> two semis side-by-side at the
+    centre, with Final + 3rd + Champion stacked above them (out of line)."""
     b = []
     for i, m in enumerate(_R32_LEFT):
         b.append(_box(1, 2 * i + 1, 2, _r32_inner(m, gpos, thirds_in), _RC["R32"], cls="r32"))
     for i, m in enumerate(_R32_RIGHT):
-        b.append(_box(9, 2 * i + 1, 2, _r32_inner(m, gpos, thirds_in), _RC["R32"], cls="r32"))
+        b.append(_box(8, 2 * i + 1, 2, _r32_inner(m, gpos, thirds_in), _RC["R32"], cls="r32"))
     for j, (n, a, c) in enumerate(_TREE_R16[:4]):
         b.append(_box(2, 4 * j + 1, 4, _ko_inner(n, _RC["R16"]), _RC["R16"], cls="r16", fed="fedL"))
     for j, (n, a, c) in enumerate(_TREE_R16[4:]):
-        b.append(_box(8, 4 * j + 1, 4, _ko_inner(n, _RC["R16"]), _RC["R16"], cls="r16", fed="fedR"))
+        b.append(_box(7, 4 * j + 1, 4, _ko_inner(n, _RC["R16"]), _RC["R16"], cls="r16", fed="fedR"))
     for k, (n, a, c) in enumerate(_TREE_QF[:2]):
         b.append(_box(3, 8 * k + 1, 8, _ko_inner(n, _RC["QF"]), _RC["QF"], cls="qf", fed="fedL"))
     for k, (n, a, c) in enumerate(_TREE_QF[2:]):
-        b.append(_box(7, 8 * k + 1, 8, _ko_inner(n, _RC["QF"]), _RC["QF"], cls="qf", fed="fedR"))
+        b.append(_box(6, 8 * k + 1, 8, _ko_inner(n, _RC["QF"]), _RC["QF"], cls="qf", fed="fedR"))
+    # The two semis sit side by side in the middle; their full-height cells keep the
+    # QF->SF connectors aligned. Champion star, Final and 3rd are stacked ABOVE them.
     b.append(_box(4, 1, 16, _ko_inner(101, _RC["SF"], title="SEMI-FINAL"), _RC["SF"], cls="sf", fed="fedL"))
-    b.append(_box(6, 1, 16, _ko_inner(102, _RC["SF"], title="SEMI-FINAL"), _RC["SF"], cls="sf", fed="fedR"))
-    # centre column (wide): Final + Champion + 3rd place pulled out of the line and
-    # given room — their role is obvious, so they show full date · time · location.
-    b.append(f'<div class="champ" style="grid-column:5;grid-row:1/span 3">'
-             f'<span class="trophy">★</span>CHAMPION</div>')
-    b.append(_box(5, 6, 6, _ko_inner(104, _RC["F"], big=True, title="FINAL"), _RC["F"], cls="fin big", fed="fedC"))
-    b.append(_box(5, 12, 4, _ko_inner(103, _RC["3P"], big=True, title="3RD PLACE"), _RC["3P"], cls="third big"))
+    b.append(_box(5, 1, 16, _ko_inner(102, _RC["SF"], title="SEMI-FINAL"), _RC["SF"], cls="sf", fed="fedR"))
+    b.append('<div class="champ" style="grid-column:4/span 2;grid-row:1">'
+             '<span class="trophy">★</span>CHAMPION</div>')
+    b.append(_ctr(2, 3, _ko_inner(104, _RC["F"], big=True, title="FINAL"), "fin big"))
+    b.append(_ctr(5, 2, _ko_inner(103, _RC["3P"], big=True, title="3RD PLACE"), "third big"))
     return "".join(b)
+
+
+def _ko_venue_legend() -> str:
+    """Footer key: every venue code used on the knockout boxes -> its city."""
+    seen: dict[str, str] = {}
+    for _date, _time, venue, code in _KO_INFO.values():
+        if code and code not in seen:
+            seen[code] = venue
+    return " &nbsp; ".join(f'<b>{c}</b>&nbsp;{html.escape(v)}'
+                           for c, v in sorted(seen.items()))
 
 
 def _round_timeline() -> str:
@@ -714,7 +731,7 @@ def build_bracket_page(conn: sqlite3.Connection, today=None) -> str:
   <div class="bbody">
     <div class="bracket">{_bracket_grid(gpos, thirds_in)}</div>
   </div>
-  <footer>R32 template &amp; tree from world-cup-2026.html · standings/clinch from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
+  <footer><span class="vleg"><b class="vlh">Venues</b> {_ko_venue_legend()}</span></footer>
 </div></body></html>"""
 
 
@@ -870,11 +887,16 @@ _BRACKET_CSS = """
 .tl .tln { font-weight:700; } .tl .tld { color:#90a4ae; }
 .bkey { display:flex; flex-wrap:wrap; gap:3px 14px; margin-top:3px; font-size:9px; color:#78909c; }
 .bkey .kd { display:inline-flex; align-items:center; gap:4px; }
+footer { text-align:left !important; }
+.vleg { font-size:8.5px; color:#5a6b7a; line-height:1.5; }
+.vleg .vlh { color:""" + NAVY + """; text-transform:uppercase; letter-spacing:.5px; }
+.vleg b { color:""" + NAVY + """; }
 .bbody { flex:1; padding:6px 10px 4px; overflow:hidden; }
 .bracket { height:100%; display:grid; column-gap:6px; row-gap:0;
-           grid-template-columns:1.74in .92in .88in .88in 1.44in .88in .88in .92in 1.74in;
+           grid-template-columns:1.72in 1.16in 1.13in 1.1in 1.1in 1.13in 1.16in 1.72in;
            grid-template-rows:repeat(16,1fr); --g:6px; }
-.cell { position:relative; height:100%; display:flex; align-items:center; }
+.cell, .ccell { position:relative; height:100%; display:flex; align-items:center; }
+.ccell { justify-content:center; z-index:2; }
 .mtch { width:100%; border:1px solid #dde2e7; border-radius:4px;
         background:#fff; box-shadow:0 1px 1px rgba(0,0,0,.03); overflow:hidden; font-size:10.5px; }
 .mhd { display:flex; justify-content:space-between; align-items:center; gap:3px; color:#fff;
@@ -904,9 +926,9 @@ _BRACKET_CSS = """
 .mtch.fin { border:2px solid """ + GOLD + """; } .mtch.fin .kowhen { color:#9a7b15; font-weight:800; }
 .mtch.fin .kotitle { color:#b8860b; }
 .mtch.third { border-color:#c8b6df; } .mtch.third .kotitle { color:#7b5ea7; }
-.champ { grid-column:5; align-self:center; text-align:center; font-weight:800; font-size:13px;
-         color:#9a7b15; letter-spacing:1.5px; }
-.champ .trophy { display:block; font-size:22px; color:""" + GOLD + """; }
+.champ { align-self:center; justify-self:center; text-align:center; font-weight:800; font-size:12px;
+         color:#9a7b15; letter-spacing:1.5px; z-index:2; }
+.champ .trophy { display:block; font-size:21px; color:""" + GOLD + """; }
 /* connectors: each fed cell draws a bracket into the gap toward its two feeders,
    whose centres sit at the cell's 25% and 75% points */
 .cell.fedL::before, .cell.fedR::before { content:""; position:absolute; box-sizing:border-box;
