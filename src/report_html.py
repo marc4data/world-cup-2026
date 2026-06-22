@@ -635,15 +635,26 @@ def _r32_inner(match, gpos, thirds_in) -> str:
             f'{_slot(top, gpos, thirds_in)}{_slot(bot, gpos, thirds_in)}')
 
 
-def _ko_inner(num, rc, *, big=False, title="") -> str:
-    """Knockout box: date · time · location (no feeder labels — the lines show that)."""
+def _wx_chip(wx) -> str:
+    """Weather forecast chip (icon + °F) for a knockout match, if in range."""
+    if not wx or wx["temp_c"] is None:
+        return ""
+    f = round(wx["temp_c"] * 9 / 5 + 32)
+    icon, label = _WMO.get(wx["code"], ("•", (wx["summary"] or "").strip()))
+    return (f'<div class="kowx" title="{html.escape(label)} · {f}°F (forecast)">'
+            f'<span class="wi">{icon}</span>{f}°F</div>')
+
+
+def _ko_inner(num, rc, *, big=False, title="", wx=None) -> str:
+    """Knockout box: date · time · location (+ weather forecast when available).
+    Feeders aren't labelled — the connector lines already show them."""
     date, time, venue, code = _KO_INFO.get(num, ("", "", "", ""))
     loc = venue if big else code
     line2 = " · ".join(x for x in (time, loc) if x)
     head = f'<div class="kotitle">{title}</div>' if title else ""
     return (f'<div class="mhd" style="background:{rc}"><b>M{num}</b>'
             f'<span>{html.escape(date)}</span></div>{head}'
-            f'<div class="kowhen">{html.escape(line2)}</div>')
+            f'<div class="kowhen">{html.escape(line2)}</div>{_wx_chip(wx)}')
 
 
 def _box(col, rs, span, inner, rc, *, cls="", fed="") -> str:
@@ -660,7 +671,7 @@ def _ctr(rs, span, inner, cls) -> str:
             f'<div class="mtch {cls}">{inner}</div></div>')
 
 
-def _bracket_grid(gpos, thirds_in) -> str:
+def _bracket_grid(gpos, thirds_in, wx) -> str:
     """Converging tree (8 cols): R32 -> R16 -> QF -> two semis side-by-side at the
     centre, with Final + 3rd + Champion stacked above them (out of line)."""
     b = []
@@ -669,22 +680,30 @@ def _bracket_grid(gpos, thirds_in) -> str:
     for i, m in enumerate(_R32_RIGHT):
         b.append(_box(8, 2 * i + 1, 2, _r32_inner(m, gpos, thirds_in), _RC["R32"], cls="r32"))
     for j, (n, a, c) in enumerate(_TREE_R16[:4]):
-        b.append(_box(2, 4 * j + 1, 4, _ko_inner(n, _RC["R16"]), _RC["R16"], cls="r16", fed="fedL"))
+        b.append(_box(2, 4 * j + 1, 4, _ko_inner(n, _RC["R16"], wx=wx.get(n)), _RC["R16"], cls="r16", fed="fedL"))
     for j, (n, a, c) in enumerate(_TREE_R16[4:]):
-        b.append(_box(7, 4 * j + 1, 4, _ko_inner(n, _RC["R16"]), _RC["R16"], cls="r16", fed="fedR"))
+        b.append(_box(7, 4 * j + 1, 4, _ko_inner(n, _RC["R16"], wx=wx.get(n)), _RC["R16"], cls="r16", fed="fedR"))
     for k, (n, a, c) in enumerate(_TREE_QF[:2]):
-        b.append(_box(3, 8 * k + 1, 8, _ko_inner(n, _RC["QF"]), _RC["QF"], cls="qf", fed="fedL"))
+        b.append(_box(3, 8 * k + 1, 8, _ko_inner(n, _RC["QF"], wx=wx.get(n)), _RC["QF"], cls="qf", fed="fedL"))
     for k, (n, a, c) in enumerate(_TREE_QF[2:]):
-        b.append(_box(6, 8 * k + 1, 8, _ko_inner(n, _RC["QF"]), _RC["QF"], cls="qf", fed="fedR"))
+        b.append(_box(6, 8 * k + 1, 8, _ko_inner(n, _RC["QF"], wx=wx.get(n)), _RC["QF"], cls="qf", fed="fedR"))
     # The two semis sit side by side in the middle; their full-height cells keep the
     # QF->SF connectors aligned. Champion star, Final and 3rd are stacked ABOVE them.
-    b.append(_box(4, 1, 16, _ko_inner(101, _RC["SF"], title="SEMI-FINAL"), _RC["SF"], cls="sf", fed="fedL"))
-    b.append(_box(5, 1, 16, _ko_inner(102, _RC["SF"], title="SEMI-FINAL"), _RC["SF"], cls="sf", fed="fedR"))
+    b.append(_box(4, 1, 16, _ko_inner(101, _RC["SF"], title="SEMI-FINAL", wx=wx.get(101)), _RC["SF"], cls="sf", fed="fedL"))
+    b.append(_box(5, 1, 16, _ko_inner(102, _RC["SF"], title="SEMI-FINAL", wx=wx.get(102)), _RC["SF"], cls="sf", fed="fedR"))
     b.append('<div class="champ" style="grid-column:4/span 2;grid-row:1">'
              '<span class="trophy">★</span>CHAMPION</div>')
-    b.append(_ctr(2, 3, _ko_inner(104, _RC["F"], big=True, title="FINAL"), "fin big"))
-    b.append(_ctr(5, 2, _ko_inner(103, _RC["3P"], big=True, title="3RD PLACE"), "third big"))
+    b.append(_ctr(2, 3, _ko_inner(104, _RC["F"], big=True, title="FINAL", wx=wx.get(104)), "fin big"))
+    b.append(_ctr(5, 2, _ko_inner(103, _RC["3P"], big=True, title="3RD PLACE", wx=wx.get(103)), "third big"))
     return "".join(b)
+
+
+def _load_ko_weather(conn) -> dict:
+    try:
+        return {r["match_num"]: r for r in conn.execute(
+            "SELECT match_num, temp_c, code, summary FROM weather_forecast")}
+    except sqlite3.OperationalError:        # table not created yet -> graceful
+        return {}
 
 
 def _ko_venue_legend() -> str:
@@ -713,6 +732,7 @@ def build_bracket_page(conn: sqlite3.Connection, today=None) -> str:
         today = datetime.now(CUTOFF_TZ).date()
     gpos = _group_positions(conn)
     thirds_in = _thirds_in_top8(conn)
+    wx = _load_ko_weather(conn)
     played = conn.execute("SELECT COUNT(*) FROM fixture WHERE is_finished=1").fetchone()[0]
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <style>{_CSS}{_BRACKET_CSS}</style></head><body>
@@ -729,7 +749,7 @@ def build_bracket_page(conn: sqlite3.Connection, today=None) -> str:
       <span class="kd">array = current top 3 (code · pts · GD) — no team placed until its spot is mathematically settled</span></div>
   </div>
   <div class="bbody">
-    <div class="bracket">{_bracket_grid(gpos, thirds_in)}</div>
+    <div class="bracket">{_bracket_grid(gpos, thirds_in, wx)}</div>
   </div>
   <footer><span class="vleg"><b class="vlh">Venues</b> {_ko_venue_legend()}</span></footer>
 </div></body></html>"""
@@ -921,6 +941,10 @@ footer { text-align:left !important; }
 .kowhen { text-align:center; font-size:9.5px; color:#37474f; padding:2px 3px 2.5px; font-weight:600; white-space:nowrap; }
 .kotitle { text-align:center; font-size:7.5px; font-weight:800; letter-spacing:.6px; color:#90a4ae;
            padding-top:1.5px; text-transform:uppercase; }
+.kowx { text-align:center; font-size:9px; color:#607d8b; font-weight:700; padding-bottom:2px;
+        border-top:1px solid #f0f2f4; padding-top:1.5px; }
+.kowx .wi { margin-right:2px; }
+.mtch.big .kowx { font-size:10px; }
 .mtch.big { box-shadow:0 1px 3px rgba(0,0,0,.10); }
 .mtch.big .kowhen { font-size:11px; padding:3px; }
 .mtch.fin { border:2px solid """ + GOLD + """; } .mtch.fin .kowhen { color:#9a7b15; font-weight:800; }

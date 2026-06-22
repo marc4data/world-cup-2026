@@ -21,6 +21,7 @@ import requests
 
 import db
 import integrity
+import ko_weather
 import openmeteo
 import qualification
 import ranking
@@ -154,6 +155,14 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
             weather_updated += 1
         # else: forecast unchanged -> no write
 
+    # 6b) Knockout-match forecasts (static schedule; fills in as matches enter the
+    #     forecast horizon). Best-effort — never fail the run.
+    ko_forecasts = 0
+    try:
+        ko_forecasts = ko_weather.update_ko_weather(conn, today=weather_today)["in_range"]
+    except Exception:
+        optional_errors += 1
+
     # 7) Audit row.
     calls_used = api.calls_used - calls_before
     finished_count = sum(fr["is_finished"] for fr in fixture_rows)
@@ -162,6 +171,7 @@ def run(mode: str, *, max_predictions: int | None = None, db_path: Path | str = 
                    f"new_predictions={new_predictions}",
                    f"weather_added={weather_added}",
                    f"weather_updated={weather_updated}",
+                   f"ko_forecasts={ko_forecasts}",
                    f"optional_errors={optional_errors}"]
     if unmatched_venues:
         notes_parts.append("unmatched_venues=" + "|".join(sorted(unmatched_venues)))

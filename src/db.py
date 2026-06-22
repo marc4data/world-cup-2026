@@ -117,6 +117,22 @@ CREATE TABLE IF NOT EXISTS weather (
   FOREIGN KEY (fixture_id) REFERENCES fixture(fixture_id)
 );
 
+-- Open-Meteo forecast for the (static) knockout-match schedule, keyed by match
+-- number (knockout fixtures don't exist as rows yet). Populated only once a match
+-- is inside the ~16-day forecast horizon; rows fill in as the tournament nears.
+CREATE TABLE IF NOT EXISTS weather_forecast (
+  match_num   INTEGER PRIMARY KEY,
+  kickoff_utc TEXT,
+  source      TEXT,
+  is_forecast INTEGER,
+  temp_c      REAL,
+  precip_mm   REAL,
+  wind_kmh    REAL,
+  code        INTEGER,
+  summary     TEXT,
+  captured_at TEXT
+);
+
 -- Phase 2 (M7): player season + per-match stats -----------------------------
 CREATE TABLE IF NOT EXISTS player (
   player_id   INTEGER PRIMARY KEY,
