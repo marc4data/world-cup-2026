@@ -46,7 +46,7 @@ def test_bracket_page_empty_and_seeded(conn, teams):
     empty = report_html.build_bracket_page(conn, today=date(2026, 6, 20))
     assert '<div class="page">' in empty                 # graceful on no standings
     assert "Round of 32" in empty                         # round timeline legend
-    assert "M104" in empty and "CHAMPION" in empty        # converging tree rendered
+    assert "M104" in empty and "FINAL" in empty           # converging tree rendered
     # An *open* (not mathematically settled) position shows the array, never a placed team.
     db.upsert(conn, "group_qualification", [{
         "season": 2026, "league_id": 1, "group_label": "Group A", "team_id": 1,

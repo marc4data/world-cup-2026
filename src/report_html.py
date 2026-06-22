@@ -557,7 +557,7 @@ _KO_INFO = {
 # Round colours — matched to the calendar bands (_ROUND_BANDS) so the same hue
 # means the same round on the timeline legend and across the bracket.
 _RC = {"R32": "#3d7bbf", "R16": "#2e8b57", "QF": "#c9a227",
-       "SF": "#c0504d", "F": "#b8860b", "3P": "#7b5ea7"}
+       "SF": "#c0504d", "F": "#1a2348", "3P": "#7b5ea7"}
 
 
 def _group_positions(conn) -> dict:
@@ -688,13 +688,12 @@ def _bracket_grid(gpos, thirds_in, wx) -> str:
     for k, (n, a, c) in enumerate(_TREE_QF[2:]):
         b.append(_box(6, 8 * k + 1, 8, _ko_inner(n, _RC["QF"], wx=wx.get(n)), _RC["QF"], cls="qf", fed="fedR"))
     # The two semis sit side by side in the middle; their full-height cells keep the
-    # QF->SF connectors aligned. Champion star, Final and 3rd are stacked ABOVE them.
+    # QF->SF connectors aligned. Final and 3rd are pulled to the top, above the
+    # highest quarter-final boxes (which centre around row 4-5).
     b.append(_box(4, 1, 16, _ko_inner(101, _RC["SF"], title="SEMI-FINAL", wx=wx.get(101)), _RC["SF"], cls="sf", fed="fedL"))
     b.append(_box(5, 1, 16, _ko_inner(102, _RC["SF"], title="SEMI-FINAL", wx=wx.get(102)), _RC["SF"], cls="sf", fed="fedR"))
-    b.append('<div class="champ" style="grid-column:4/span 2;grid-row:1">'
-             '<span class="trophy">★</span>CHAMPION</div>')
-    b.append(_ctr(2, 3, _ko_inner(104, _RC["F"], big=True, title="FINAL", wx=wx.get(104)), "fin big"))
-    b.append(_ctr(5, 2, _ko_inner(103, _RC["3P"], big=True, title="3RD PLACE", wx=wx.get(103)), "third big"))
+    b.append(_ctr(1, 2, _ko_inner(104, _RC["F"], big=True, title="FINAL", wx=wx.get(104)), "fin big"))
+    b.append(_ctr(3, 2, _ko_inner(103, _RC["3P"], big=True, title="3RD PLACE", wx=wx.get(103)), "third big"))
     return "".join(b)
 
 
@@ -947,12 +946,10 @@ footer { text-align:left !important; }
 .mtch.big .kowx { font-size:10px; }
 .mtch.big { box-shadow:0 1px 3px rgba(0,0,0,.10); }
 .mtch.big .kowhen { font-size:11px; padding:3px; }
-.mtch.fin { border:2px solid """ + GOLD + """; } .mtch.fin .kowhen { color:#9a7b15; font-weight:800; }
-.mtch.fin .kotitle { color:#b8860b; }
+.mtch.fin { border:2px solid """ + GOLD + """; box-shadow:0 1px 4px rgba(26,35,72,.22); }
+.mtch.fin .kowhen { color:#1a2348; font-weight:800; }
+.mtch.fin .kotitle { color:""" + GOLD + """; }
 .mtch.third { border-color:#c8b6df; } .mtch.third .kotitle { color:#7b5ea7; }
-.champ { align-self:center; justify-self:center; text-align:center; font-weight:800; font-size:12px;
-         color:#9a7b15; letter-spacing:1.5px; z-index:2; }
-.champ .trophy { display:block; font-size:21px; color:""" + GOLD + """; }
 /* connectors: each fed cell draws a bracket into the gap toward its two feeders,
    whose centres sit at the cell's 25% and 75% points */
 .cell.fedL::before, .cell.fedR::before { content:""; position:absolute; box-sizing:border-box;
