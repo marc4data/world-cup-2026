@@ -803,16 +803,17 @@ header .meta { font-size:9.5px; opacity:.8; }
 .brow .bt { color:#78909c; font-size:9px; flex:0 0 auto; }
 .brow .ba { color:#43a047; font-size:8px; flex:0 0 auto; }
 .brow.none { color:#b0bec5; font-style:italic; }
-.day { break-inside:avoid; margin-bottom:10px; }
+.day { break-inside:avoid; margin-bottom:7px; }
 .day.today { background:#FFF8E1; border-radius:5px; padding:3px 4px; margin:-3px -4px 9px; }
 .dh { font-size:10px; font-weight:800; color:""" + NAVY + """; border-bottom:2px solid """ + GOLD + """;
       padding-bottom:2px; margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; }
 .dh .now { background:""" + GOLD + """; color:#000; font-size:7.5px; font-weight:800; padding:1px 4px; border-radius:3px; }
-.fx { display:flex; align-items:center; gap:2px; font-size:10.5px; padding:2.5px 1px; text-decoration:none;
+.fx { display:flex; align-items:center; gap:2px; font-size:10.5px; padding:1.5px 1px; text-decoration:none;
       color:inherit; border-bottom:1px solid #f0f2f4; }
 .fx:hover { background:#eef4fb; }
-.fx .t { width:32px; color:#78909c; font-size:9.5px; flex:0 0 auto; white-space:nowrap; }
-.fx .team { flex:1; display:inline-flex; align-items:center; overflow:hidden; white-space:nowrap; }
+.fx .t { width:34px; min-width:0; color:#78909c; font-size:9.5px; flex:0 0 auto;
+         white-space:nowrap; overflow:hidden; }
+.fx .team { flex:1; min-width:0; display:inline-flex; align-items:center; overflow:hidden; white-space:nowrap; }
 .fx .team.home { justify-content:flex-end; }
 .fx .team.away { justify-content:flex-start; }
 .fx .pick { display:inline-flex; align-items:center; gap:3px; border:1.3px solid transparent; padding:0 2px; border-radius:3px; }
@@ -821,11 +822,12 @@ header .meta { font-size:9.5px; opacity:.8; }
 .fx .lg { width:13px; height:13px; object-fit:contain; }
 .fx .score { width:32px; text-align:center; font-weight:800; flex:0 0 auto; }
 .fx .proj { width:32px; text-align:center; color:#0D47A1; font-size:9px; flex:0 0 auto; }
-.fx .vs { width:30px; text-align:center; color:#b0bec5; flex:0 0 auto; }
-.fx .ven { min-width:20px; text-align:center; color:#5a6b7a; font-size:8px; font-weight:700;
-           background:#eef1f4; border-radius:3px; padding:0 2px; flex:0 0 auto; letter-spacing:.2px; }
-.fx .wx { width:39px; text-align:right; color:#607d8b; font-size:9px; flex:0 0 auto;
-          white-space:nowrap; }
+.fx .vs { width:32px; text-align:center; color:#b0bec5; flex:0 0 auto; }
+.fx .ven { width:24px; min-width:0; text-align:center; color:#5a6b7a; font-size:8px; font-weight:700;
+           background:#eef1f4; border-radius:3px; padding:0 1px; flex:0 0 auto; letter-spacing:.1px;
+           overflow:hidden; }
+.fx .wx { width:37px; min-width:0; text-align:right; color:#607d8b; font-size:9px; flex:0 0 auto;
+          white-space:nowrap; overflow:hidden; }
 .fx .wx .wi { margin-right:2px; font-size:10px; }
 .vlegend { display:flex; flex-wrap:wrap; align-items:center; gap:2px 9px; padding:4px 16px;
            border-top:1px solid #eceff1; background:#fafbfc; font-size:7.5px; color:#546e7a; }
@@ -838,7 +840,7 @@ footer { font-size:8px; color:#90a4ae; padding:3px 16px; border-top:1px solid #e
 # Extra CSS for the Groups page (standings tables left, schedule right).
 _GROUPS_CSS = """
 .gbody { flex:1; display:flex; gap:10px; padding:8px 12px; overflow:hidden; }
-.gtables { width:2.8in; flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr;
+.gtables { width:2.62in; flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr;
            grid-template-rows:repeat(6,1fr); grid-auto-flow:column; gap:0 10px; height:100%; }
 .gsched { flex:1; column-count:3; column-gap:10px; }
 .gt { width:100%; border-collapse:collapse; font-size:10px; align-self:center; }
@@ -846,7 +848,7 @@ _GROUPS_CSS = """
               font-size:10.5px; padding:2.5px 7px; letter-spacing:.4px; }
 .gt th { background:#5a6b7a; color:#fff; font-weight:700; padding:2px 3px; text-align:center; font-size:8.5px; }
 .gt th:nth-child(2) { text-align:left; }
-.gt td { padding:2.5px 4px; text-align:center; border-bottom:1px solid #eceff1; }
+.gt td { padding:0.5px 4px; text-align:center; border-bottom:1px solid #eceff1; }
 .gt td.tm { text-align:left; }
 .gt td.tm .tw { display:inline-flex; align-items:center; gap:4px; font-weight:600; }
 .gt td.tm .lg { width:15px; height:15px; object-fit:contain; }
