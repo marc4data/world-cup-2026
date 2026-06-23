@@ -765,6 +765,242 @@ def render_bracket(db_path=DB_PATH, out_path=BRACKET_PATH, *, today=None) -> str
     return str(out_path)
 
 
+# --- Storylines page: the tournament's interesting tidbits -------------------
+STORYLINES_PATH = REPORT_PATH.with_name("page_storylines.html")
+
+
+def _sli(logo, code, text, *, cls="") -> str:
+    img = f'<img class="sflag" src="{html.escape(logo)}">' if logo else '<span class="sflag"></span>'
+    return (f'<li class="{cls}">{img}<b class="scode">{html.escape(code or "")}</b>'
+            f'<span class="stx">{text}</span></li>')
+
+
+def _ordinal(n) -> str:
+    return {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}.get(n, f"{n}th")
+
+
+def _story_clinched(conn) -> list:
+    rows = conn.execute(
+        """SELECT q.group_label g, t.code, t.logo, q.clinched_first cf, q.clinched_top2 ct,
+                  q.best_pos bp, q.worst_pos wp
+           FROM group_qualification q JOIN team t ON t.team_id = q.team_id
+           WHERE q.clinched_top2 = 1 OR q.clinched_first = 1 OR q.best_pos = q.worst_pos
+           ORDER BY q.clinched_first DESC, q.group_label, q.position""").fetchall()
+    out = []
+    for r in rows:
+        if r["cf"]:
+            out.append(_sli(r["logo"], r["code"], f"won <b>{r['g']}</b>", cls="won"))
+        elif r["bp"] == r["wp"]:
+            out.append(_sli(r["logo"], r["code"], f"locked {_ordinal(r['bp'])} · {r['g']}", cls="thr"))
+        else:
+            out.append(_sli(r["logo"], r["code"], f"through · {r['g']}", cls="thr"))
+    return out or ['<li class="empty">— no group settled yet —</li>']
+
+
+def _story_boot(conn) -> list:
+    rows = conn.execute(
+        """SELECT p.name, t.code, t.logo, ps.goals g, ps.assists a
+           FROM player_season_stat ps JOIN player p ON p.player_id = ps.player_id
+           JOIN team t ON t.team_id = ps.team_id WHERE ps.goals > 0
+           ORDER BY ps.goals DESC, ps.assists DESC, ps.minutes ASC LIMIT 8""").fetchall()
+    out = []
+    for i, r in enumerate(rows):
+        ast = f' · {r["a"]}a' if r["a"] else ""
+        out.append(_sli(r["logo"], r["code"],
+                        f'<span class="num">{r["g"]}</span> {html.escape(r["name"])}{ast}',
+                        cls="lead" if i == 0 else ""))
+    return out or ['<li class="empty">— no goals yet —</li>']
+
+
+def _story_ratings(conn) -> list:
+    rows = conn.execute(
+        """SELECT p.name, t.code, t.logo, fps.rating r, fps.goals g, fps.assists a,
+                  th.code home, ta.code away, f.home_goals hg, f.away_goals ag
+           FROM fixture_player_stat fps JOIN player p ON p.player_id = fps.player_id
+           JOIN team t ON t.team_id = fps.team_id
+           JOIN fixture f ON f.fixture_id = fps.fixture_id
+           JOIN team th ON th.team_id = f.home_team_id
+           JOIN team ta ON ta.team_id = f.away_team_id
+           WHERE fps.rating IS NOT NULL AND f.is_finished = 1
+           ORDER BY fps.rating DESC, fps.goals DESC LIMIT 7""").fetchall()
+    out = []
+    for r in rows:
+        bits = []
+        if r["g"]:
+            bits.append(f'{r["g"]}G')
+        if r["a"]:
+            bits.append(f'{r["a"]}A')
+        line = " · ".join(bits)
+        match = f'{r["home"]} {r["hg"]}–{r["ag"]} {r["away"]}'
+        det = f'{html.escape(r["name"])}{" — " + line if line else ""} <span class="mn">({match})</span>'
+        out.append(_sli(r["logo"], r["code"], f'<span class="num">{r["r"]:g}</span> {det}'))
+    return out or ['<li class="empty">— no ratings yet —</li>']
+
+
+def _story_var(conn) -> list:
+    rows = conn.execute(
+        """SELECT DISTINCT e.minute, e.detail, e.player_name pn, t.logo, t.code,
+                  th.code home, ta.code away, f.home_goals hg, f.away_goals ag
+           FROM event e JOIN team t ON t.team_id = e.team_id
+           JOIN fixture f ON f.fixture_id = e.fixture_id
+           JOIN team th ON th.team_id = f.home_team_id
+           JOIN team ta ON ta.team_id = f.away_team_id
+           WHERE e.type = 'Var'
+           ORDER BY (e.detail LIKE '%cancel%' OR e.detail LIKE '%Disallow%') DESC, e.fixture_id
+           LIMIT 6""").fetchall()
+    out = []
+    for r in rows:
+        match = f'{r["home"]} {r["hg"]}–{r["ag"]} {r["away"]}'
+        who = f' · {html.escape(r["pn"])}' if r["pn"] else ""
+        out.append(_sli(r["logo"], r["code"],
+                        f'{html.escape(r["detail"])} <span class="mn">{r["minute"]}\' ({match}){who}</span>'))
+    return out or ['<li class="empty">— no VAR calls logged —</li>']
+
+
+def _story_late(conn) -> list:
+    """Late (>=80') goals that flipped the scorer from losing->draw or draw->win,
+    using only matches whose goal timeline reproduces the final score exactly."""
+    fixtures = conn.execute(
+        """SELECT f.fixture_id fid, f.home_team_id ht, f.away_team_id at_,
+                  f.home_goals hg, f.away_goals ag, th.code home, ta.code away,
+                  th.logo hlogo, ta.logo alogo
+           FROM fixture f JOIN team th ON th.team_id = f.home_team_id
+           JOIN team ta ON ta.team_id = f.away_team_id
+           WHERE f.is_finished = 1 AND f.home_goals IS NOT NULL""").fetchall()
+    out = []
+    for f in fixtures:
+        raw = conn.execute(
+            """SELECT minute, COALESCE(extra,0) ex, team_id, detail, player_name pn, seq
+               FROM event WHERE fixture_id=? AND type='Goal'
+               ORDER BY minute, COALESCE(extra,0), seq""", (f["fid"],)).fetchall()
+        seen, goals = set(), []
+        for g in raw:
+            key = (g["minute"], g["ex"], g["team_id"], g["pn"], g["detail"])
+            if key not in seen:
+                seen.add(key)
+                goals.append(g)
+        h = a = 0
+        cand = []
+        for g in goals:
+            benefit = ((f["at_"] if g["team_id"] == f["ht"] else f["ht"])
+                       if g["detail"] == "Own Goal" else g["team_id"])
+            bh, ba = h, a
+            if benefit == f["ht"]:
+                h += 1
+            else:
+                a += 1
+            if g["minute"] + g["ex"] >= 80:
+                if benefit == f["ht"]:
+                    sb, ob, sa, oa = bh, ba, h, a
+                else:
+                    sb, ob, sa, oa = ba, bh, a, h
+                kind = ("equalised" if sb < ob and sa == oa
+                        else "won it" if sb == ob and sa > oa else None)
+                if kind:
+                    is_home = benefit == f["ht"]
+                    mm = f'{g["minute"]}+{g["ex"]}' if g["ex"] else f'{g["minute"]}'
+                    cand.append((f["hlogo"] if is_home else f["alogo"],
+                                 f["home"] if is_home else f["away"], g["pn"], mm, kind))
+        if (h, a) == (f["hg"], f["ag"]):     # timeline trustworthy
+            for logo, code, pn, mm, kind in cand:
+                match = f'{f["home"]} {f["hg"]}–{f["ag"]} {f["away"]}'
+                out.append(_sli(logo, code,
+                                f'{html.escape(pn or "")} <b>{kind}</b> {mm}\' '
+                                f'<span class="mn">({match})</span>',
+                                cls="won" if kind == "won it" else "thr"))
+    return out or ['<li class="empty">— no late drama yet —</li>']
+
+
+def _story_big(conn, today) -> list:
+    rows = conn.execute(
+        """SELECT f.kickoff_utc, th.code home, th.logo hlogo, ta.code away, ta.logo alogo,
+                  f.group_label g, COALESCE(sh.points,0)+COALESCE(sa.points,0) interest,
+                  p.pct_home, p.pct_away, p.predicted_winner_name pw
+           FROM fixture f JOIN team th ON th.team_id = f.home_team_id
+           JOIN team ta ON ta.team_id = f.away_team_id
+           LEFT JOIN standing sh ON sh.team_id=f.home_team_id AND sh.group_label=f.group_label
+           LEFT JOIN standing sa ON sa.team_id=f.away_team_id AND sa.group_label=f.group_label
+           LEFT JOIN prediction p ON p.fixture_id = f.fixture_id
+           WHERE f.is_finished = 0 AND f.group_label IS NOT NULL
+           ORDER BY interest DESC, f.kickoff_utc LIMIT 5""").fetchall()
+    out = []
+    for r in rows:
+        when = _pt(r["kickoff_utc"]).strftime("%b %-d")
+        pct = ""
+        if r["pct_home"] is not None and r["pct_away"] is not None:
+            hi = max(r["pct_home"], r["pct_away"])
+            side = r["home"] if r["pct_home"] >= r["pct_away"] else r["away"]
+            pct = f' <span class="mn">· {side} {hi}%</span>'
+        flags = (f'<img class="sflag" src="{html.escape(r["hlogo"] or "")}">'
+                 f'<img class="sflag" src="{html.escape(r["alogo"] or "")}">')
+        out.append(f'<li>{flags}<b class="scode">{html.escape(r["home"])}–{html.escape(r["away"])}</b>'
+                   f'<span class="stx"><span class="mn">{when} · {r["g"]}</span>{pct}</span></li>')
+    return out or ['<li class="empty">— no upcoming games —</li>']
+
+
+def _story_blowouts(conn) -> list:
+    rows = conn.execute(
+        """SELECT th.code home, th.logo hlogo, ta.code away, ta.logo alogo,
+                  f.home_goals hg, f.away_goals ag, ABS(f.home_goals-f.away_goals) margin
+           FROM fixture f JOIN team th ON th.team_id = f.home_team_id
+           JOIN team ta ON ta.team_id = f.away_team_id
+           WHERE f.is_finished = 1 AND f.home_goals IS NOT NULL AND f.home_goals <> f.away_goals
+           ORDER BY margin DESC, (f.home_goals + f.away_goals) DESC LIMIT 6""").fetchall()
+    out = []
+    for r in rows:
+        win_home = r["hg"] > r["ag"]
+        wlogo = r["hlogo"] if win_home else r["alogo"]
+        wcode = r["home"] if win_home else r["away"]
+        loser = r["away"] if win_home else r["home"]
+        score = f'{max(r["hg"], r["ag"])}–{min(r["hg"], r["ag"])}'
+        out.append(_sli(wlogo, wcode, f'<b>{score}</b> v {html.escape(loser)} '
+                                      f'<span class="mn">(+{r["margin"]})</span>', cls="won"))
+    return out or ['<li class="empty">— no results yet —</li>']
+
+
+def _story_card(icon, title, color, items) -> str:
+    return (f'<section class="card"><h3 style="border-color:{color}">'
+            f'<span class="ci" style="background:{color}">{icon}</span>{title}</h3>'
+            f'<ul>{"".join(items)}</ul></section>')
+
+
+def build_storylines_page(conn: sqlite3.Connection, today=None) -> str:
+    if today is None:
+        today = datetime.now(CUTOFF_TZ).date()
+    played = conn.execute("SELECT COUNT(*) FROM fixture WHERE is_finished=1").fetchone()[0]
+    cards = [
+        _story_card("🔥", "Big games ahead", "#3d7bbf", _story_big(conn, today)),
+        _story_card("👟", "Golden Boot race", "#c9a227", _story_boot(conn)),
+        _story_card("⭐", "Standout performances", "#0B1F3A", _story_ratings(conn)),
+        _story_card("⏱", "Late drama (outcome flipped)", "#7b5ea7", _story_late(conn)),
+        _story_card("📺", "VAR watch", "#c0504d", _story_var(conn)),
+        _story_card("💥", "Biggest wins", "#d35400", _story_blowouts(conn)),
+        _story_card("🔒", "Locked &amp; loaded", "#2e8b57", _story_clinched(conn)),
+    ]
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<style>{_CSS}{_STORY_CSS}</style></head><body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
+    <div class="title">Tournament Storylines</div>
+    <div class="meta">{played}/72 played · the tidbits worth knowing</div>
+  </header>
+  <div class="sbody">{"".join(cards)}</div>
+  <footer>Generated from worldcup.db · ratings/goals/events from API-Football · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
+</div></body></html>"""
+
+
+def render_storylines(db_path=DB_PATH, out_path=STORYLINES_PATH, *, today=None) -> str:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(build_storylines_page(conn, today))
+    finally:
+        conn.close()
+    return str(out_path)
+
+
 _CSS = """
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color:#1a1a1a; }
@@ -964,8 +1200,38 @@ footer { text-align:left !important; }
 """
 
 
+# Storylines page CSS (a masonry grid of tidbit cards).
+_STORY_CSS = """
+.sbody { flex:1; padding:12px 18px; overflow:hidden; column-count:3; column-gap:18px; }
+.card { break-inside:avoid; margin-bottom:12px; border:1px solid #e3e7eb; border-radius:7px;
+        background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); overflow:hidden; }
+.card h3 { display:flex; align-items:center; gap:8px; font-size:12.5px; color:""" + NAVY + """;
+           font-weight:800; padding:7px 13px; border-bottom:3px solid; letter-spacing:.3px; }
+.card h3 .ci { width:22px; height:22px; border-radius:6px; display:inline-flex; align-items:center;
+               justify-content:center; font-size:12px; flex:0 0 auto; }
+.card ul { list-style:none; padding:4px 0; margin:0; }
+.card li { display:flex; align-items:center; gap:7px; padding:5px 13px; font-size:12px;
+           color:#37474f; line-height:1.3; border-top:1px solid #f4f6f8; }
+.card li:first-child { border-top:none; }
+.card li.empty { color:#b0bec5; font-style:italic; justify-content:center; }
+.sflag { width:20px; height:20px; object-fit:contain; flex:0 0 auto; }
+.card .scode { font-weight:800; color:""" + NAVY + """; flex:0 0 auto; min-width:33px; }
+.card .stx { flex:1; min-width:0; }
+.card .stx b { color:#1B5E20; font-weight:700; }
+.card .mn { color:#90a4ae; font-size:10px; }
+.card .num { display:inline-block; min-width:22px; font-weight:800; font-size:14px; color:""" + GOLD + """;
+             text-align:center; }
+.card li.lead { background:#FFFBEF; }
+.card li.lead .num { color:#9a7b15; }
+.card li.won .stx b { color:#9a7b15; }
+.card li.thr .stx b { color:#2E7D32; }
+.card li.won .scode, .card li.thr .scode { color:#1B5E20; }
+"""
+
+
 if __name__ == "__main__":
     print("wrote", render())            # page 3 — matches
     print("wrote", render_groups())     # groups — standings + schedule
     print("wrote", render_knockout())   # knockout — calendar + qualifiers
     print("wrote", render_bracket())    # bracket — projected Round of 32
+    print("wrote", render_storylines())  # storylines — tournament tidbits

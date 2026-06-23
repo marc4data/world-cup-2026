@@ -70,6 +70,30 @@ def test_bracket_page_empty_and_seeded(conn, teams):
     assert "1st A ✓" in locked                             # placed once mathematically settled
 
 
+def test_storylines_page_builds(conn, teams):
+    out = report_html.build_storylines_page(conn, today=date(2026, 6, 20))
+    assert '<div class="page">' in out                 # graceful on empty tables
+    assert "Tournament Storylines" in out
+    for card in ("Big games ahead", "Golden Boot", "Standout performances",
+                 "Late drama", "VAR watch", "Biggest wins", "Locked"):
+        assert card in out
+    # A standout rating must render with its match context.
+    db.upsert(conn, "fixture", [{
+        "fixture_id": 1, "season": 2026, "league_id": 1, "round": "Group Stage - 1",
+        "group_label": "Group A", "kickoff_utc": "2026-06-18T19:00:00+00:00",
+        "status_short": "FT", "is_finished": 1, "venue_id": None,
+        "home_team_id": 1, "away_team_id": 2, "home_goals": 3, "away_goals": 0}],
+        ["fixture_id"])
+    db.upsert(conn, "player", [{"player_id": 1, "name": "Star Striker",
+                                "nationality": "Alpha", "age": 25}], ["player_id"])
+    db.upsert(conn, "fixture_player_stat", [{
+        "fixture_id": 1, "player_id": 1, "team_id": 1, "minutes": 90, "position": "F",
+        "rating": 9.5, "is_starter": 1, "captain": 0, "goals": 3, "assists": 0,
+        "captured_at": "2026-06-18T22:00:00Z"}], ["fixture_id", "player_id"])
+    out2 = report_html.build_storylines_page(conn, today=date(2026, 6, 20))
+    assert "Star Striker" in out2 and "9.5" in out2
+
+
 def test_knockout_page_builds(conn):
     out = report_html.build_knockout_page(conn, today=date(2026, 6, 20))
     assert '<div class="page">' in out
