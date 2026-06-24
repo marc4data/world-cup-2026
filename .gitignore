@@ -20,3 +20,6 @@ __pycache__/
 
 # Manual Excel backups
 reports/*_backup_*.xlsx
+
+# Local EDA / data-profiling scratch (notebooks + helpers; not part of the pipeline)
+dq_eda/
