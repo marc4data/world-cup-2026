@@ -6,9 +6,11 @@ name: Daily Ingest
 
 on:
   schedule:
-    # 08:00 UTC = 01:00 PT (PDT) — just after the PT cutoff day has rolled over,
-    # so "finished as of the previous day" is stable.
-    - cron: "0 8 * * *"
+    # 06:00 UTC = 23:00 PT (11pm PDT, summer). The last game of the day finishes
+    # by ~10pm PT, so this gives the API ~1h to settle and still runs on the same
+    # PT day — the finished rule (kickoff date <= today PT) then captures that
+    # day's matches. (GitHub may delay scheduled runs by a few minutes.)
+    - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       mode:
