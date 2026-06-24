@@ -247,13 +247,26 @@ def _day_blocks(matches, today) -> str:
     out = []
     for d, ms in sorted(days.items()):
         dt = datetime.fromisoformat(d).date()
-        is_today = dt == today
+        # The "today" highlight is applied client-side (see _TODAY_JS) from the
+        # browser's clock in PT, so it stays correct no matter when the page was
+        # rendered. data-date carries the ISO day; the badge is hidden until matched.
         out.append(
-            f'<div class="day{" today" if is_today else ""}">'
+            f'<div class="day" data-date="{d}">'
             f'<div class="dh">{dt.strftime("%a %b %-d")}'
-            f'{"<span class=now>TODAY</span>" if is_today else ""}</div>'
+            f'<span class="now">TODAY</span></div>'
             + "".join(_match_row(m, today) for m in ms) + '</div>')
     return "".join(out)
+
+
+# Applies the "today" highlight in the browser (PT), so a page rendered last night
+# still highlights the correct day when viewed today.
+_TODAY_JS = """<script>
+(function(){try{
+  var d=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date());
+  var el=document.querySelector('.day[data-date="'+d+'"]');
+  if(el)el.classList.add('today');
+}catch(e){}})();
+</script>"""
 
 
 def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
@@ -278,7 +291,7 @@ def build_matches_page(conn: sqlite3.Connection, today=None) -> str:
   </div>
   {_venue_legend()}
   <footer>Generated from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
-</div></body></html>"""
+</div>{_TODAY_JS}</body></html>"""
 
 
 def render(db_path=DB_PATH, out_path=REPORT_PATH, *, today=None) -> str:
@@ -353,7 +366,7 @@ def build_groups_page(conn: sqlite3.Connection, today=None) -> str:
   </div>
   {_venue_legend()}
   <footer>Generated from worldcup.db · {datetime.now(CUTOFF_TZ):%Y-%m-%d %H:%M} PT</footer>
-</div></body></html>"""
+</div>{_TODAY_JS}</body></html>"""
 
 
 def render_groups(db_path=DB_PATH, out_path=GROUPS_PATH, *, today=None) -> str:
@@ -1122,7 +1135,8 @@ header .meta { font-size:9.5px; opacity:.8; }
 .day.today { background:#FFF8E1; border-radius:5px; padding:3px 4px; margin:-3px -4px 9px; }
 .dh { font-size:10px; font-weight:800; color:""" + NAVY + """; border-bottom:2px solid """ + GOLD + """;
       padding-bottom:2px; margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; }
-.dh .now { background:""" + GOLD + """; color:#000; font-size:7.5px; font-weight:800; padding:1px 4px; border-radius:3px; }
+.dh .now { display:none; background:""" + GOLD + """; color:#000; font-size:7.5px; font-weight:800; padding:1px 4px; border-radius:3px; }
+.day.today .now { display:inline-block; }
 .fx { display:flex; align-items:center; gap:2px; font-size:10.5px; padding:1.5px 1px; text-decoration:none;
       color:inherit; border-bottom:1px solid #f0f2f4; }
 .fx:hover { background:#eef4fb; }
