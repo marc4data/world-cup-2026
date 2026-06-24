@@ -59,6 +59,34 @@ def test_h2h_breaks_overall_tie(conn):
     assert integrity.reconcile_rank(conn)       # and the disagreement is flagged
 
 
+def test_h2h_applied_before_overall_gd_2026(conn):
+    """2026 rule: head-to-head is applied BEFORE overall GD/GF. The team with the
+    worse overall goal difference still ranks first if it won the head-to-head."""
+    for t in (1, 2):
+        _team(conn, t)
+    _standing(conn, "Group A", 1, 2, 3, 1, 3)   # team1: 3 pts, overall GD +1, GF 3
+    _standing(conn, "Group A", 2, 1, 3, 3, 5)   # team2: 3 pts, better overall GD +3, GF 5
+    _fixture(conn, 30, 1, 2, 1, 0)              # team1 beat team2 head-to-head
+    ranking.update_rank_fifa(conn, 2026, 1)
+    assert _ranks(conn) == {1: 1, 2: 2}         # H2H winner first, despite worse overall GD
+    # (the pre-2026 "overall GD first" order would have ranked team2 ahead)
+
+
+def test_h2h_then_overall_for_three_way(conn):
+    """3-way points tie: H2H ranks the team that beat the others on top; the two it
+    couldn't separate by their mutual result fall to overall GD."""
+    for t in (1, 2, 3):
+        _team(conn, t)
+    _standing(conn, "Group A", 1, 1, 3, 0, 2)   # team1 beat both -> top on H2H
+    _standing(conn, "Group A", 2, 2, 3, 2, 4)   # team2 & team3 drew each other ->
+    _standing(conn, "Group A", 3, 3, 3, 1, 3)   #   split by overall GD (2 > 1)
+    _fixture(conn, 41, 1, 2, 1, 0)              # 1 beat 2
+    _fixture(conn, 42, 1, 3, 1, 0)              # 1 beat 3
+    _fixture(conn, 43, 2, 3, 1, 1)              # 2 drew 3
+    ranking.update_rank_fifa(conn, 2026, 1)
+    assert _ranks(conn) == {1: 1, 2: 2, 3: 3}
+
+
 def test_fairplay_breaks_no_h2h_tie(conn):
     for t in (1, 2, 3):
         _team(conn, t)

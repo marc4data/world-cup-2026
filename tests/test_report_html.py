@@ -94,6 +94,16 @@ def test_storylines_page_builds(conn, teams):
     assert "Star Striker" in out2 and "9.5" in out2
 
 
+def test_rules_page_builds():
+    out = report_html.build_rules_page()                  # static reference, no DB needed
+    assert '<div class="page">' in out
+    assert "Tiebreaker Rules" in out
+    assert "head-to-head" in out and "FIFA World Ranking" in out
+    assert "Best third-placed teams" in out and "Round of 32 pairing" in out
+    # the 2026 change is called out, and the R32 winner set is the official one
+    assert "before" in out and "A · C · D · E · G · I · K · L" in out
+
+
 def test_knockout_page_builds(conn):
     out = report_html.build_knockout_page(conn, today=date(2026, 6, 20))
     assert '<div class="page">' in out

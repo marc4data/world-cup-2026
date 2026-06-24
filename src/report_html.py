@@ -1001,6 +1001,83 @@ def render_storylines(db_path=DB_PATH, out_path=STORYLINES_PATH, *, today=None) 
     return str(out_path)
 
 
+# --- Rules appendix: the official FIFA 2026 tiebreaker criteria ---------------
+RULES_PATH = REPORT_PATH.with_name("page_rules.html")
+
+
+def _rstep(n, text, scope, cls="") -> str:
+    badge = f'<span class="rn">{n}</span>' if n else '<span class="rn sub">↳</span>'
+    sc = f'<span class="rscope">{scope}</span>' if scope else ""
+    return f'<li class="{cls}">{badge}<span class="rtx">{text}</span>{sc}</li>'
+
+
+def build_rules_page(conn=None, today=None) -> str:
+    within = "".join([
+        _rstep(1, "Greatest number of <b>points</b>", "all 3 matches"),
+        _rstep(2, "Greatest <b>points</b> head-to-head", "tied teams", "h2h"),
+        _rstep(3, "Superior <b>goal difference</b> head-to-head", "tied teams", "h2h"),
+        _rstep(4, "Most <b>goals scored</b> head-to-head", "tied teams", "h2h"),
+        _rstep("", "<i>re-apply steps 2–4 to any subset still tied</i>", "", "rnote"),
+        _rstep(5, "Superior <b>goal difference</b>", "all matches"),
+        _rstep(6, "Most <b>goals scored</b>", "all matches"),
+        _rstep(7, "Highest <b>team-conduct</b> (fair-play) score", "all matches"),
+        _rstep(8, "<b>FIFA World Ranking</b> — most recent", ""),
+    ])
+    third = "".join([
+        _rstep(1, "<b>Points</b>", ""),
+        _rstep(2, "<b>Goal difference</b>", ""),
+        _rstep(3, "<b>Goals scored</b>", ""),
+        _rstep(4, "<b>Team-conduct</b> score", ""),
+        _rstep(5, "<b>FIFA World Ranking</b>", ""),
+    ])
+    conduct = "".join(
+        f'<li><span class="cval">{v}</span><span class="rtx">{t}</span></li>'
+        for v, t in [("−1", "single yellow card"), ("−3", "second yellow (→ red)"),
+                     ("−4", "direct red card"), ("−5", "yellow + later direct red")])
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<style>{_CSS}{_STORY_CSS}{_RULES_CSS}</style></head><body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="logo">★</span> FIFA WORLD CUP <span class="sub">2026 · USA · CANADA · MEXICO</span></div>
+    <div class="title">Appendix — Tiebreaker Rules</div>
+    <div class="meta">how teams are ranked &amp; how the Round of 32 is filled</div>
+  </header>
+  <div class="rnew">NEW FOR 2026 · head-to-head is applied <b>before</b> overall goal difference
+    (reversed from 2018/2022) · the final tiebreaker is the <b>FIFA World Ranking</b>, not a drawing of lots</div>
+  <div class="rbody">
+    <section class="card rcard wide">
+      <h3 style="border-color:#3d7bbf"><span class="ci" style="background:#3d7bbf">A</span>Ranking teams within a group</h3>
+      <ol class="rsteps">{within}</ol>
+    </section>
+    <div class="rcol">
+      <section class="card rcard">
+        <h3 style="border-color:#2e8b57"><span class="ci" style="background:#2e8b57">B</span>Best third-placed teams</h3>
+        <ol class="rsteps">{third}</ol>
+        <p class="rfoot">The <b>8 best of 12</b> third-placed teams reach the Round of 32. They are
+          in different groups, so there is <b>no head-to-head</b>.</p>
+      </section>
+      <section class="card rcard">
+        <h3 style="border-color:#c9a227"><span class="ci" style="background:#c9a227">C</span>Round of 32 pairing</h3>
+        <p class="rtxt">Winners of groups <b>A · C · D · E · G · I · K · L</b> each face a
+          <b>third-placed</b> team. Winners of <b>B · F · H · J</b> face <b>runners-up</b>.
+          (The specific third is set by FIFA's lookup table, keyed on which groups the eight thirds come from.)</p>
+      </section>
+      <section class="card rcard">
+        <h3 style="border-color:#c0504d"><span class="ci" style="background:#c0504d">⚑</span>Team-conduct (fair-play) score</h3>
+        <ul class="rconduct">{conduct}</ul>
+      </section>
+    </div>
+  </div>
+  <footer>Sources: FIFA · FOX Sports · ESPN · Wikipedia (2026 regulations) · computed in src/ranking.py (standing.rank_fifa)</footer>
+</div></body></html>"""
+
+
+def render_rules(db_path=DB_PATH, out_path=RULES_PATH, *, today=None) -> str:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(build_rules_page())
+    return str(out_path)
+
+
 _CSS = """
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color:#1a1a1a; }
@@ -1229,9 +1306,42 @@ _STORY_CSS = """
 """
 
 
+# Rules appendix CSS (numbered check-down + reference cards).
+_RULES_CSS = """
+.rnew { margin:0 16px; padding:6px 12px; background:#FFFBEF; border:1px solid """ + GOLD + """;
+        border-radius:6px; font-size:11px; color:#7a5c00; }
+.rnew b { color:#9a7b15; }
+.rbody { flex:1; display:flex; gap:16px; padding:12px 16px; overflow:hidden; }
+.rcard.wide { width:4.2in; flex:0 0 auto; }
+.rcol { flex:1; display:flex; flex-direction:column; gap:12px; min-width:0; }
+.rsteps { list-style:none; margin:0; padding:5px 0; counter-reset:none; }
+.rsteps li { display:flex; align-items:center; gap:10px; padding:6.5px 14px; font-size:13px;
+             color:#37474f; border-top:1px solid #f4f6f8; }
+.rsteps li:first-child { border-top:none; }
+.rn { width:24px; height:24px; flex:0 0 auto; border-radius:50%; background:""" + NAVY + """;
+      color:#fff; font-weight:800; font-size:12px; display:inline-flex; align-items:center; justify-content:center; }
+.rn.sub { background:transparent; color:#b0bec5; font-size:14px; }
+.rtx { flex:1; min-width:0; } .rtx b { color:""" + NAVY + """; }
+.rscope { font-size:9.5px; color:#90a4ae; font-style:italic; flex:0 0 auto; }
+.rsteps li.h2h { background:#F3FAF4; } .rsteps li.h2h .rn { background:#2e8b57; }
+.rsteps li.h2h .rtx b { color:#1f6b3e; }
+.rsteps li.rnote { padding:3px 14px 3px 48px; }
+.rsteps li.rnote .rtx { color:#90a4ae; font-size:11px; }
+.rcard .rfoot { font-size:10.5px; color:#607d8b; padding:6px 14px 10px; line-height:1.4; margin:0; }
+.rcard .rtxt { font-size:12px; color:#37474f; padding:9px 14px 11px; line-height:1.45; margin:0; }
+.rcard .rtxt b { color:""" + NAVY + """; }
+.rconduct { list-style:none; margin:0; padding:5px 0; }
+.rconduct li { display:flex; align-items:center; gap:11px; padding:5px 14px; font-size:12.5px; color:#37474f;
+               border-top:1px solid #f4f6f8; }
+.rconduct li:first-child { border-top:none; }
+.cval { width:30px; flex:0 0 auto; text-align:center; font-weight:800; font-size:14px; color:#c0504d; }
+"""
+
+
 if __name__ == "__main__":
     print("wrote", render())            # page 3 — matches
     print("wrote", render_groups())     # groups — standings + schedule
     print("wrote", render_knockout())   # knockout — calendar + qualifiers
     print("wrote", render_bracket())    # bracket — projected Round of 32
     print("wrote", render_storylines())  # storylines — tournament tidbits
+    print("wrote", render_rules())      # appendix — tiebreaker rules

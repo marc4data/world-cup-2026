@@ -84,7 +84,7 @@ jobs:
                   reports/01_group_breakdown.png \
                   reports/page3_matches.html reports/page_groups.html \
                   reports/page_knockout.html reports/page_bracket.html \
-                  reports/page_storylines.html
+                  reports/page_storylines.html reports/page_rules.html
           if git diff --staged --quiet; then
             echo "No data changes to commit."
           else

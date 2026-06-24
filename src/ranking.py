@@ -1,15 +1,18 @@
 """FIFA-correct group ranking computed from our own data (standing.rank_fifa).
 
 API-Football's `standing.rank` stops at Points -> GD -> GF. This applies the official
-World Cup group-stage check-down (see docs/standings_rank_tiebreaker.md):
+**World Cup 2026** group-stage check-down (see docs/standings_rank_tiebreaker.md),
+which — unlike 2018/2022 — puts head-to-head BEFORE overall GD/GF:
 
-    1-3  overall: points -> goal difference -> goals scored
-    4-6  head-to-head among the still-tied teams: pts -> GD -> GF
-    8    fair-play: fewest card points
-    9    (drawing of lots) -> we fall back to the API rank for determinism
+    1    overall points
+    2-4  head-to-head among the tied teams: pts -> GD -> GF
+         (re-applied to any still-tied subset, recomputing the mini-table)
+    5-6  overall: goal difference -> goals scored
+    7    fair-play / team-conduct: fewest card points
+    8    FIFA World Ranking -> not loaded, so the API rank stands in (deterministic)
 
 Using the API rank as the final fallback means `rank_fifa` differs from `rank`
-*only* where steps 4-8 actually reorder teams — i.e. where the FIFA criteria matter
+*only* where steps 2-7 actually reorder teams — i.e. where the FIFA criteria matter
 and the API (which ignores them) may be wrong.
 """
 from __future__ import annotations
@@ -72,32 +75,57 @@ def _fairplay(conn, team_ids: list[int]) -> dict[int, int]:
     return pts
 
 
-def _break_tie(conn, block: list[dict]) -> list[dict]:
-    """Order a block tied on overall (pts, GD, GF): H2H -> fair-play -> API rank."""
+def _order_overall(conn, block: list[dict]) -> list[dict]:
+    """Head-to-head exhausted (it separated no one): fall to overall GD -> overall
+    GF -> fair-play -> deterministic fallback (FIFA World Ranking, not loaded ->
+    API rank stands in)."""
+    block.sort(key=lambda t: (-(t["goals_diff"] or 0), -(t["goals_for"] or 0)))
+    result = []
+    for _, sub in groupby(block, key=lambda t: (t["goals_diff"], t["goals_for"])):
+        sub = list(sub)
+        if len(sub) == 1:
+            result += sub
+            continue
+        fp = _fairplay(conn, [t["team_id"] for t in sub])
+        sub.sort(key=lambda t: (fp[t["team_id"]],
+                                t["rank_api"] if t["rank_api"] is not None else 99))
+        result += sub
+    return result
+
+
+def _order_tied(conn, block: list[dict]) -> list[dict]:
+    """Order teams level on overall POINTS, per the FIFA 2026 check-down: apply
+    head-to-head (points -> GD -> GF among the tied teams) FIRST; re-apply it to any
+    still-tied *subset* (recomputing the mini-table for just those teams); only when
+    head-to-head separates no one fall through to the overall criteria."""
+    if len(block) == 1:
+        return block
     ids = [t["team_id"] for t in block]
     h2h = _h2h_stats(conn, ids)
     block.sort(key=lambda t: (-h2h[t["team_id"]]["pts"], -h2h[t["team_id"]]["gd"],
                               -h2h[t["team_id"]]["gf"]))
-    fp = _fairplay(conn, ids)
     result = []
     for _, sub in groupby(block, key=lambda t: (h2h[t["team_id"]]["pts"],
                                                 h2h[t["team_id"]]["gd"],
                                                 h2h[t["team_id"]]["gf"])):
         sub = list(sub)
-        # fewer cards, then the API rank stands in for "drawing of lots"
-        sub.sort(key=lambda t: (fp[t["team_id"]], t["rank_api"] if t["rank_api"] is not None else 99))
-        result += sub
+        if len(sub) == 1:
+            result += sub
+        elif len(sub) < len(block):
+            result += _order_tied(conn, sub)        # reduced subset -> re-apply H2H
+        else:
+            result += _order_overall(conn, sub)     # H2H split no one -> overall criteria
     return result
 
 
 def order_group(conn, teams: list[dict]) -> list[dict]:
-    teams.sort(key=lambda t: (-(t["points"] or 0), -(t["goals_diff"] or 0),
-                              -(t["goals_for"] or 0),
+    # Group only by overall points; everything below points is the 2026 check-down,
+    # which starts with head-to-head (not overall GD/GF).
+    teams.sort(key=lambda t: (-(t["points"] or 0),
                               t["rank_api"] if t["rank_api"] is not None else 99))
     ordered = []
-    for _, block in groupby(teams, key=lambda t: (t["points"], t["goals_diff"], t["goals_for"])):
-        block = list(block)
-        ordered += block if len(block) == 1 else _break_tie(conn, block)
+    for _, block in groupby(teams, key=lambda t: t["points"]):
+        ordered += _order_tied(conn, list(block))
     return ordered
 
 
