@@ -89,14 +89,17 @@ The **8 best of the 12** third-placed teams reach the Round of 32.
 
 ### C — Round-of-32 assignment
 
-The winners of groups **A, C, D, E, G, I, K, L** are each paired with one of the eight
+The winners of groups **A, B, D, E, G, I, K, L** are each paired with one of the eight
 qualifying third-placed teams (which specific third is set by FIFA's published lookup
 table, keyed on *which* groups the eight thirds come from). The other four winners
-(B, F, H, J) face runners-up.
+(C, F, H, J) face runners-up.
 
-> ⚠️ Our bracket template (extracted from the `world-cup-2026.html` infographic) currently
-> pairs **Winner B** with a third (M85) instead of **Winner C** — likely a pre-revision
-> infographic. Flagged for correction in `report_html.py`.
+> ✅ Verified match-by-match (2026-06-24) against the Wikipedia knockout-stage page and the
+> ESPN schedule: our bracket template (`report_html.py` `_R32_LEFT`/`_R32_RIGHT`/`_TREE_*`)
+> is correct for all 16 R32 pairings and 8 R16 feeders — including **M85 = Winner B vs a
+> third**. (An earlier note here claiming "Winner C" came from an unreliable secondary
+> summary and was wrong.) Per-match R32 dates/venues were corrected to the official schedule.
+> Caveat: our M-numbers are bracket-positional, not FIFA's chronological match numbers.
 
 ### Sources
 

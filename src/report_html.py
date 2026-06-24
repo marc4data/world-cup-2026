@@ -506,26 +506,28 @@ def render_knockout(db_path=DB_PATH, out_path=KNOCKOUT_PATH, *, today=None) -> s
 # --- Bracket page: FIFA Round-of-32 matchups projected from group standings ----
 # The R32 pairing template (which group position meets which) and the
 # Round-of-16 -> Final tree were reverse-engineered from the static infographic
-# `world-cup-2026.html` (its SVG feeder labels + connector geometry). Per-match
-# date/venue were recovered from the same SVG; the two top-of-bracket matches
-# (M74, M76) render their date off the top edge in the source, so those are blank.
+# `world-cup-2026.html`, then VERIFIED match-by-match against the official sources
+# (Wikipedia knockout-stage page + ESPN schedule, 2026-06-24): all 16 R32 pairings
+# and 8 R16 feeders confirmed. Per-match date/venue corrected to the official
+# schedule (matched by pairing). NB our M-numbers are bracket-positional, not FIFA's
+# chronological match numbers; the matchups, tree and dates are what's authoritative.
 BRACKET_PATH = REPORT_PATH.with_name("page_bracket.html")
 
 # A feeder is ("W"|"RU", group-letter) or ("3", "A/B/C/D/F") — a best-3rd from one
 # of the listed groups (FIFA assigns which once the eight qualifying thirds are set).
 # (match #, top feeder, bottom feeder, date, venue). Order = top->bottom on the page.
 _R32_LEFT = [
-    (74, ("W", "E"),  ("3", "A/B/C/D/F"), "",       ""),
+    (74, ("W", "E"),  ("3", "A/B/C/D/F"), "Jun 29", "Foxborough"),
     (77, ("W", "I"),  ("3", "C/D/F/G/H"), "Jun 30", "New Jersey"),
     (73, ("RU", "A"), ("RU", "B"),        "Jun 28", "Los Angeles"),
-    (75, ("W", "F"),  ("RU", "C"),        "Jun 29", "Guadalajara"),
+    (75, ("W", "F"),  ("RU", "C"),        "Jun 29", "Guadalupe"),
     (83, ("RU", "K"), ("RU", "L"),        "Jul 2",  "Toronto"),
     (84, ("W", "H"),  ("RU", "J"),        "Jul 2",  "Los Angeles"),
     (81, ("W", "D"),  ("3", "B/E/F/I/J"), "Jul 1",  "Santa Clara"),
     (82, ("W", "G"),  ("3", "A/E/H/I/J"), "Jul 1",  "Seattle"),
 ]
 _R32_RIGHT = [
-    (76, ("W", "C"),  ("RU", "F"),        "",       ""),
+    (76, ("W", "C"),  ("RU", "F"),        "Jun 29", "Houston"),
     (78, ("RU", "E"), ("RU", "I"),        "Jun 30", "Arlington"),
     (79, ("W", "A"),  ("3", "C/E/F/H/I"), "Jun 30", "Mexico City"),
     (80, ("W", "L"),  ("3", "E/H/I/J/K"), "Jul 1",  "Atlanta"),
@@ -1058,8 +1060,8 @@ def build_rules_page(conn=None, today=None) -> str:
       </section>
       <section class="card rcard">
         <h3 style="border-color:#c9a227"><span class="ci" style="background:#c9a227">C</span>Round of 32 pairing</h3>
-        <p class="rtxt">Winners of groups <b>A · C · D · E · G · I · K · L</b> each face a
-          <b>third-placed</b> team. Winners of <b>B · F · H · J</b> face <b>runners-up</b>.
+        <p class="rtxt">Winners of groups <b>A · B · D · E · G · I · K · L</b> each face a
+          <b>third-placed</b> team. Winners of <b>C · F · H · J</b> face <b>runners-up</b>.
           (The specific third is set by FIFA's lookup table, keyed on which groups the eight thirds come from.)</p>
       </section>
       <section class="card rcard">

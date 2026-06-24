@@ -94,6 +94,25 @@ def test_storylines_page_builds(conn, teams):
     assert "Star Striker" in out2 and "9.5" in out2
 
 
+def test_bracket_structure_matches_official_2026():
+    """Locks the R32 pairings + R16 tree verified (2026-06-24) against the Wikipedia
+    knockout-stage page and ESPN schedule — guards against silent regressions."""
+    r32 = {num: (top, bot) for num, top, bot, _d, _v in
+           report_html._R32_LEFT + report_html._R32_RIGHT}
+    assert len(r32) == 16
+    # winners that face a 3rd-placed team — official set is A,B,D,E,G,I,K,L (NOT C)
+    win_vs_third = []
+    for top, bot in r32.values():
+        if {top[0], bot[0]} == {"W", "3"}:
+            win_vs_third.append((top if top[0] == "W" else bot)[1])
+    assert sorted(win_vs_third) == ["A", "B", "D", "E", "G", "I", "K", "L"]
+    assert r32[85] == (("W", "B"), ("3", "E/F/G/I/J"))   # the match earlier wrongly flagged
+    assert r32[76] == (("W", "C"), ("RU", "F"))          # C faces a runner-up, not a third
+    assert set(report_html._TREE_R16) == {
+        (89, 74, 77), (90, 73, 75), (91, 76, 78), (92, 79, 80),
+        (93, 83, 84), (94, 81, 82), (95, 86, 88), (96, 85, 87)}
+
+
 def test_rules_page_builds():
     out = report_html.build_rules_page()                  # static reference, no DB needed
     assert '<div class="page">' in out
@@ -101,7 +120,7 @@ def test_rules_page_builds():
     assert "head-to-head" in out and "FIFA World Ranking" in out
     assert "Best third-placed teams" in out and "Round of 32 pairing" in out
     # the 2026 change is called out, and the R32 winner set is the official one
-    assert "before" in out and "A · C · D · E · G · I · K · L" in out
+    assert "before" in out and "A · B · D · E · G · I · K · L" in out
 
 
 def test_knockout_page_builds(conn):
