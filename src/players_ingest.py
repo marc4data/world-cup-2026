@@ -92,8 +92,11 @@ def run_fixtures(conn, api, captured, *, max_fixtures) -> dict:
 
 def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
         max_pages=None, db_path=DB_PATH) -> dict:
-    # 3 calls per fixture (players + events + statistics).
-    api = APIFootball(max_calls_per_run=max(80, (max_fixtures or 0) * 3 + 60))
+    # Per-run safety ceiling (NOT the daily budget, which the client tracks
+    # separately). Headroom for the paginated /players season pull PLUS up to
+    # max_fixtures detail pulls (3 calls each); otherwise a backlog (e.g. when the
+    # group stage finishes all at once) trips the ceiling mid-run.
+    api = APIFootball(max_calls_per_run=max(250, (max_fixtures or 0) * 3 + 180))
     conn = db.connect(db_path)
     db.init_db(conn)
     started = _now_utc_iso()
