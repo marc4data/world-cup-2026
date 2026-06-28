@@ -620,6 +620,8 @@ table.mini td.n,table.mini th.n{text-align:right}
 .posrow{display:grid;grid-template-columns:20px 1fr;gap:7px;align-items:start;margin-bottom:4px}
 .posrow .plab{font-size:10px;font-weight:800;color:var(--gold);padding-top:3px}
 .posrow .chips{display:flex;flex-wrap:wrap;gap:4px}
+.jn{display:inline-block;width:24px;text-align:right;margin-right:7px;color:var(--muted);
+  font-weight:700;font-variant-numeric:tabular-nums}
 .note-list{list-style:none;display:flex;flex-direction:column;gap:8px}
 .note-list li{font-size:12.5px;background:#fafbfd;border-left:3px solid var(--gold);padding:8px 11px;border-radius:0 6px 6px 0}
 .note-list li b{color:var(--navy)}
@@ -795,9 +797,7 @@ function matchTable(s){
     + `</tbody></table>`;
 }
 // ER-9: '#10 Mbappé' when a shirt number is present, name alone otherwise.
-function pn(p){ return (p.number!=null
-  ? '<span style="color:var(--muted);font-variant-numeric:tabular-nums">#'+p.number+'</span> '
-  : '') + esc(p.name); }
+function pn(p){ const n=(p.number!=null)?('#'+p.number):''; return `<span class="jn">${n}</span>${esc(p.name)}`; }
 function scorerTable(s){
   if(!s.scorers.length) return '<div style="color:var(--muted);font-size:11.5px">No goal contributions recorded.</div>';
   return `<table class="mini"><thead><tr><th>Player</th><th>Pos</th><th class="n">G</th><th class="n">A</th><th class="n" style="width:78px">Rating</th></tr></thead><tbody>`
