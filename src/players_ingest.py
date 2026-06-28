@@ -23,13 +23,15 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import db
 import integrity
 import transform
 from apifootball import APIFootball
-from config import DB_PATH, MAX_FIXTURE_PLAYER_PULLS_PER_RUN
+from config import DB_PATH, LEAGUE_ID, MAX_FIXTURE_PLAYER_PULLS_PER_RUN, SEASON
+
+SQUAD_STALE_DAYS = 7   # re-pull a team's squad numbers at most weekly (static-ish)
 
 
 def _now_utc_iso() -> str:
@@ -90,6 +92,34 @@ def run_fixtures(conn, api, captured, *, max_fixtures) -> dict:
     return c
 
 
+def run_squads(conn, api, captured, *, max_teams=48) -> dict:
+    """Pull squad (shirt) numbers for national teams missing a fresh squad list.
+
+    Gate (idempotency, not budget): a team is pulled only when it has no squad row
+    captured within SQUAD_STALE_DAYS — so a backfill runs once, re-runs that week
+    make zero calls, and numbers auto-refresh ~weekly. ER-9.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=SQUAD_STALE_DAYS)).isoformat()
+    todo = [r[0] for r in conn.execute(
+        """SELECT t.team_id FROM team t
+           WHERE t.is_national = 1
+             AND NOT EXISTS (
+               SELECT 1 FROM squad s
+               WHERE s.team_id = t.team_id AND s.season = ? AND s.league_id = ?
+                 AND s.captured_at > ?)
+           ORDER BY t.team_id LIMIT ?""",
+        (SEASON, LEAGUE_ID, cutoff, max_teams))]
+    c = {"teams": 0, "squad_rows": 0}
+    for tid in todo:
+        player_rows, squad_rows = transform.transform_squads(
+            api.get_players_squads(tid), SEASON, LEAGUE_ID, captured)
+        db.upsert(conn, "player", player_rows, ["player_id"])  # parents first
+        db.upsert(conn, "squad", squad_rows, ["team_id", "player_id", "season", "league_id"])
+        c["teams"] += 1
+        c["squad_rows"] += len(squad_rows)
+    return c
+
+
 def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
         max_pages=None, db_path=DB_PATH) -> dict:
     # Per-run safety ceiling (NOT the daily budget, which the client tracks
@@ -104,7 +134,8 @@ def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
     calls_before = api.calls_used
 
     summary = {"mode": mode, "players": 0, "season_stats": 0,
-               "fixtures_pulled": 0, "fixture_stats": 0, "events": 0, "team_stats": 0}
+               "fixtures_pulled": 0, "fixture_stats": 0, "events": 0, "team_stats": 0,
+               "squad_teams": 0, "squad_rows": 0}
     if mode in ("season", "both"):
         p, s, _ = run_season(conn, api, captured, max_pages=max_pages)
         summary["players"], summary["season_stats"] = p, s
@@ -114,6 +145,9 @@ def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
         summary["fixture_stats"] = fx["player_stats"]
         summary["events"] = fx["events"]
         summary["team_stats"] = fx["team_stats"]
+    if mode in ("squads", "both"):
+        sq = run_squads(conn, api, captured)
+        summary["squad_teams"], summary["squad_rows"] = sq["teams"], sq["squad_rows"]
 
     calls_used = api.calls_used - calls_before
     db.insert_row(conn, "load_run", {
@@ -123,7 +157,8 @@ def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
         "status": "ok",
         "notes": (f"players={summary['players']} season_stats={summary['season_stats']} "
                   f"fixture_stats={summary['fixture_stats']} events={summary['events']} "
-                  f"team_stats={summary['team_stats']}"),
+                  f"team_stats={summary['team_stats']} "
+                  f"squad_teams={summary['squad_teams']} squad_rows={summary['squad_rows']}"),
     })
 
     report = integrity.run_all_checks(conn)
@@ -140,7 +175,7 @@ def run(mode: str, *, max_fixtures=MAX_FIXTURE_PLAYER_PULLS_PER_RUN,
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="World Cup 2026 player-stats ingest (Phase 2)")
-    ap.add_argument("--mode", choices=["season", "fixtures", "both"], default="both")
+    ap.add_argument("--mode", choices=["season", "fixtures", "squads", "both"], default="both")
     ap.add_argument("--max-fixtures", type=int, default=MAX_FIXTURE_PLAYER_PULLS_PER_RUN)
     ap.add_argument("--max-pages", type=int, default=None, help="cap /players pages (debug)")
     ap.add_argument("--db", default=str(DB_PATH))
@@ -151,7 +186,8 @@ def main(argv=None) -> int:
           f"(daily_remaining={s['daily_remaining']})")
     print(f"  players={s['players']} season_stats={s['season_stats']} "
           f"fixtures_pulled={s['fixtures_pulled']} fixture_stats={s['fixture_stats']} "
-          f"events={s['events']} team_stats={s['team_stats']}")
+          f"events={s['events']} team_stats={s['team_stats']} "
+          f"squad_teams={s['squad_teams']} squad_rows={s['squad_rows']}")
     print("  integrity: OK (0 errors)")
     return 0
 

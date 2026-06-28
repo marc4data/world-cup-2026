@@ -34,6 +34,36 @@ GROUP_RE = re.compile(r"^Group [A-L]$")
 
 
 # --- venues (from the static geo lookup) -----------------------------------
+def transform_squads(raw, season, league_id, captured_at):
+    """A /players/squads response -> (player rows, squad rows). ER-9.
+
+    Player rows carry ONLY the columns this endpoint provides (id/name/age/photo)
+    so upserting them never nulls richer fields set by /players (firstname,
+    nationality, ...). number may be NULL — stored as-is, never invented.
+    """
+    players, squad = [], []
+    for block in raw:
+        team = block.get("team") or {}
+        tid = team.get("id")
+        if tid is None:
+            continue
+        for p in block.get("players") or []:
+            pid = p.get("id")
+            if pid is None:
+                continue
+            players.append({
+                "player_id": pid, "name": p.get("name"),
+                "age": p.get("age"), "photo": p.get("photo"),
+            })
+            squad.append({
+                "team_id": tid, "player_id": pid,
+                "number": p.get("number"), "position": p.get("position"),
+                "season": season, "league_id": league_id,
+                "captured_at": captured_at,
+            })
+    return players, squad
+
+
 # Stadiums the API renamed mid-tournament: {old name -> current CSV name}.
 _VENUE_NAME_ALIASES = {"Estadio BBVA": "Estadio Banorte"}  # Monterrey (renamed 2025)
 

@@ -20,7 +20,7 @@ Full requirements live in `docs/Ingestion_and_Reporting_Spec.md`. API endpoint r
 
 | Decision | Value |
 |---|---|
-| API-Football plan | **Free (~100 req/day)** — stay within budget (spec §7) |
+| API-Football plan | **Paid plan** (as of 2026-06-28; to be disabled after the tournament). Free-tier ~100/day cap no longer binds — pull broadly in single runs; idempotency + graceful NULL handling remain the constraints, not call budget. |
 | Storage | **SQLite** (`data/worldcup.db`) — enforce PKs + foreign keys |
 | Runtime | **GitHub Actions** cron (daily) + `workflow_dispatch` (manual) |
 | Weather | **Open-Meteo** (free, no key) keyed by venue lat/long |
@@ -86,7 +86,7 @@ Python 3.11+, `requests`, `pandas`, `matplotlib`, `pytest`, stdlib `sqlite3`. Ke
 1. **Idempotent upserts:** every write is `INSERT ... ON CONFLICT(pk) DO UPDATE`. Re-running the same day must not create duplicates.
 2. **No orphans:** `PRAGMA foreign_keys=ON`; load parents (team, venue) before children (fixture, standing, prediction, weather); add a post-load check asserting zero orphaned child rows.
 3. **Predictions are immutable:** fetch `/predictions?fixture=ID` once per fixture, cache permanently, never overwrite (preserve the pre-match projection for prediction-vs-actual validation).
-4. **Rate-limit guard:** `/fixtures` and `/standings` are 1 call each (return everything); cap **new predictions at 10 per run**; Open-Meteo is separate and free. Log calls used into the `load_run` audit table.
+4. **Call accounting (paid plan — caps relaxed 2026-06-28):** `/fixtures` and `/standings` are 1 call each (return everything); Open-Meteo is separate and free. The old "≤10 new predictions per run" cap was a free-tier guard and **no longer applies** — predictions may backfill in full each run (still honoring rule 3: fetch once per fixture, never overwrite). Always log calls used into the `load_run` audit table so usage stays observable.
 5. **Finished rule:** a fixture counts as finished when status ∈ {FT, AET, PEN} AND kickoff date ≤ today in `CUTOFF_TZ` (PT). (Relaxed from `<` to `≤` on 2026-06-20 so today's completed matches are included; the status guard still excludes in-progress/not-started — see spec §3.3.)
 6. **Group letters** aren't on the fixture object — derive `team_id → group_label` from `/standings`, then label group-stage fixtures by their teams.
 7. **Degrade gracefully:** early-tournament gaps (missing predictions/weather/standings) render as blanks, never errors.

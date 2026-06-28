@@ -37,6 +37,8 @@ _FOREIGN_KEYS = [
     ("team_history", "team_id", "team", "team_id"),
     ("news", "fixture_id", "fixture", "fixture_id"),
     ("group_qualification", "team_id", "team", "team_id"),
+    ("squad", "team_id", "team", "team_id"),         # ER-9
+    ("squad", "player_id", "player", "player_id"),
 ]
 
 # (table, primary-key columns) for the duplicate-PK sweep.
@@ -56,6 +58,7 @@ _PRIMARY_KEYS = [
     ("team_history", ["team_id"]),
     ("news", ["fixture_id", "seq"]),
     ("group_qualification", ["season", "league_id", "group_label", "team_id"]),
+    ("squad", ["team_id", "player_id", "season", "league_id"]),   # ER-9
 ]
 
 
@@ -192,6 +195,25 @@ def check_match_xref(conn: sqlite3.Connection) -> list[str]:
     return problems
 
 
+def check_squad_coverage(conn: sqlite3.Connection) -> list[str]:
+    """Soft check (ER-9): once squads are loaded, most members should carry a
+    shirt number. Some NULLs are fine; a broken pull (a team with none, or very
+    low overall coverage) is worth a warning. No squad rows yet -> silent."""
+    total = conn.execute("SELECT COUNT(*) FROM squad").fetchone()[0]
+    if not total:
+        return []
+    out = []
+    with_num = conn.execute("SELECT COUNT(*) FROM squad WHERE number IS NOT NULL").fetchone()[0]
+    if with_num * 100 < total * 70:                       # < 70% numbered overall
+        out.append(f"squad: only {with_num}/{total} rows have a shirt number")
+    empty_teams = conn.execute(
+        "SELECT COUNT(*) FROM (SELECT team_id FROM squad GROUP BY team_id "
+        "HAVING SUM(number IS NOT NULL) = 0)").fetchone()[0]
+    if empty_teams:
+        out.append(f"squad: {empty_teams} team(s) have no shirt numbers at all")
+    return out
+
+
 def run_all_checks(conn: sqlite3.Connection) -> IntegrityReport:
     """Run every check and bucket results into errors vs warnings."""
     report = IntegrityReport()
@@ -201,6 +223,7 @@ def run_all_checks(conn: sqlite3.Connection) -> IntegrityReport:
     report.warnings.extend(reconcile_standings(conn))
     report.warnings.extend(reconcile_rank(conn))
     report.warnings.extend(check_match_xref(conn))
+    report.warnings.extend(check_squad_coverage(conn))
     return report
 
 

@@ -146,6 +146,21 @@ CREATE TABLE IF NOT EXISTS player (
   photo       TEXT
 );
 
+-- Squad (shirt) numbers, from /players/squads (one row per player per team).
+-- Number may be NULL (un-numbered squad member) — stored, never invented.
+CREATE TABLE IF NOT EXISTS squad (
+  team_id     INTEGER NOT NULL,
+  player_id   INTEGER NOT NULL,
+  number      INTEGER,            -- shirt number; NULL allowed
+  position    TEXT,               -- squad-list position (Goalkeeper/Defender/...)
+  season      INTEGER NOT NULL,
+  league_id   INTEGER NOT NULL,
+  captured_at TEXT,
+  PRIMARY KEY (team_id, player_id, season, league_id),
+  FOREIGN KEY (team_id)   REFERENCES team(team_id),
+  FOREIGN KEY (player_id) REFERENCES player(player_id)
+);
+
 CREATE TABLE IF NOT EXISTS player_season_stat (
   player_id   INTEGER NOT NULL,
   team_id     INTEGER NOT NULL,

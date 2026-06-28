@@ -23,8 +23,11 @@ SEASON = 2026
 CUTOFF_TZ = ZoneInfo("America/Los_Angeles")
 FINISHED_STATUSES = frozenset({"FT", "AET", "PEN"})
 
-# --- Rate-limit caps (Free plan ~100 req/day; spec §7) ---------------------
-MAX_NEW_PREDICTIONS_PER_RUN = 10
+# --- Call caps (paid plan as of 2026-06-28; free ~100/day cap no longer binds)
+# Predictions are 1 call/fixture and immutable (fetched once, never overwritten),
+# so a full backfill is ~104 calls total — let it complete in one run. Kept as a
+# high safety valve, not a budget constraint.
+MAX_NEW_PREDICTIONS_PER_RUN = 120
 
 # Phase 2 (M7) player pulls — spread across days even on the Pro plan.
 # /fixtures/players is one call per finished fixture; cap per run.

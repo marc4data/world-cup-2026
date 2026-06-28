@@ -18,6 +18,7 @@ on:
           - both
           - season
           - fixtures
+          - squads
         default: both
       max_fixtures:
         description: "Max /fixtures/players pulls this run"

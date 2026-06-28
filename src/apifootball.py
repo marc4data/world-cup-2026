@@ -140,6 +140,13 @@ class APIFootball:
         )
         return payload.get("response", []), payload.get("paging", {})
 
+    def get_players_squads(self, team_id: int) -> list:
+        """Squad list (with shirt numbers) for one team — ER-9.
+
+        response[0] = {team{id,name}, players[]{id,name,age,number,position,photo}}.
+        """
+        return self._get("/players/squads", {"team": team_id})
+
     def get_fixture_players(self, fixture_id: int) -> list:
         """Per-player stats for one fixture (2 team blocks)."""
         return self._get("/fixtures/players", {"fixture": fixture_id})

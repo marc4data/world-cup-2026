@@ -38,6 +38,14 @@ pipeline today without the web frontend.
 > tab; the export renders any `*_url`/`*_api` column as a clickable hyperlink. The legacy
 > `fixture_links` view is dropped in `init_db`.
 | **ER-9** | Knockout bracket | **p1:** `group_qualification` clinch analysis (`qualification.py`) → **p2:** best-3rd cross-group + FIFA R32 slot template → **p3:** bracket report filling resolved teams | API-Football standings/fixtures | ✅ yes | Med–High | 🟢 **phases 1–3 done** |
+| **ER-10** | Player jersey (shirt) numbers | `squad` table ← `/players/squads` (`players_ingest --mode squads`, gated weekly); dashboard shows `#10 Name` | API-Football `/players/squads` | ✅ yes | Low–Med | ✅ **done** (48/48 teams, 100% numbered) |
+
+> **ER-10 (jersey numbers, done 2026-06-28; spec `docs/Jersey_Numbers_Requirements.md`).**
+> Normalized `squad(team_id, player_id, number, position, season, league_id)` table,
+> backfilled in one pass over all 48 teams (paid plan); a staleness gate (7 days) makes
+> re-runs cost zero and auto-refreshes ~weekly within the daily local pipeline (`--mode both`).
+> The knockout dashboard prefixes every player with `#NN` (NULL numbers show the name alone).
+> Live `/players/squads` shape matched the spec — no deviation.
 
 > **ER-9 phases.** *Phase 1 (done 2026-06-20):* per-group clinch analysis — each team's
 > guaranteed best/worst finishing position via remaining-outcome enumeration
