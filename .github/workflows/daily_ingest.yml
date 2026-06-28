@@ -5,12 +5,13 @@ name: Daily Ingest
 # data is never committed (spec §8 failure handling).
 
 on:
-  schedule:
-    # 06:00 UTC = 23:00 PT (11pm PDT, summer). The last game of the day finishes
-    # by ~10pm PT, so this gives the API ~1h to settle and still runs on the same
-    # PT day — the finished rule (kickoff date <= today PT) then captures that
-    # day's matches. (GitHub may delay scheduled runs by a few minutes.)
-    - cron: "0 6 * * *"
+  # NOTE: the scheduled trigger is intentionally DISABLED. GitHub Actions delayed
+  # this cron by 2.5-6 hours every night (observed in the run history), so it could
+  # not deliver same-day results on time. The pipeline now runs LOCALLY on the
+  # laptop via launchd (scripts/local_etl.sh) — see README "Keeping data fresh".
+  # This workflow is kept for on-demand cloud runs (e.g. when the laptop is off).
+  #   schedule:
+  #     - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       mode:

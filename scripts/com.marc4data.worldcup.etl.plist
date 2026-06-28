@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.marc4data.worldcup.etl</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/marcalexander/projects/ai_orchestrator_claude/world_cup_soccer_2026/scripts/local_etl.sh</string>
+  </array>
+  <!-- Local times (PT). Runs the full ETL on this machine so the local reports are
+       fresh whenever viewed. 11pm covers the night's games (finished ~10pm) for a
+       same-night refresh; the others keep it current through the day and catch up
+       if the laptop was asleep. launchd runs a missed slot when the Mac wakes. -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>23</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>19</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key>
+  <string>/Users/marcalexander/Library/Logs/worldcup_etl.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/marcalexander/Library/Logs/worldcup_etl.err.log</string>
+</dict>
+</plist>

@@ -204,28 +204,35 @@ APISPORTS_KEY=your_key_here
 
 In CI, add `APISPORTS_KEY` as a GitHub Actions repository secret.
 
-## Keeping the dashboard data fresh
+## Keeping data fresh — local ETL (primary)
 
-The daily GitHub Actions cron rebuilds and commits `data/worldcup.db` +
-`reports/worldcup_tables.xlsx` to GitHub — but it pushes to GitHub, **not to your
-laptop**. A Tableau (or other) dashboard reading the **local** Excel will look stale
-until the local clone is pulled. Two ways to stay current:
+**The pipeline runs locally on the laptop**, not on GitHub Actions. GitHub
+consistently delayed the scheduled cron by 2.5–6 hours (so "11 PM" results showed
+up at 1–6 AM and missed same-night refreshes). Running locally fires on time and
+the reports are generated *on the machine that views them* — no pull lag.
 
-1. **Scheduled local auto-pull (recommended for local-file tools like Tableau).**
-   A launchd agent runs `git pull --ff-only` each morning so the local Excel updates
-   itself. Files: `scripts/auto_pull.sh` + `scripts/com.marc4data.worldcup.autopull.plist`.
-   Install:
-   ```bash
-   cp scripts/com.marc4data.worldcup.autopull.plist ~/Library/LaunchAgents/
-   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.marc4data.worldcup.autopull.plist
-   launchctl kickstart -k gui/$(id -u)/com.marc4data.worldcup.autopull   # test now
-   ```
-   Log: `~/Library/Logs/worldcup_autopull.log`. `--ff-only` never merges or clobbers
-   local edits. After the file updates, refresh the Tableau extract/connection to re-read it.
+A launchd agent runs the full ETL (ingest → integrity → Excel → HTML pages) and
+pushes the refreshed artifacts to GitHub. Files: `scripts/local_etl.sh` +
+`scripts/com.marc4data.worldcup.etl.plist`. Schedule (PT): **23:00** (after the
+night's games), 07:30, 13:00, 19:00 — and launchd runs a missed slot on wake.
 
-2. **Read the Excel straight from GitHub (Power BI / Excel Power Query).**
-   Data source URL (always the cron's latest):
-   `https://raw.githubusercontent.com/marc4data/world-cup-2026/main/reports/worldcup_tables.xlsx`
+```bash
+# one-time install
+gh auth setup-git                                  # lets the job push non-interactively
+cp scripts/com.marc4data.worldcup.etl.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.marc4data.worldcup.etl.plist
+launchctl kickstart -k gui/$(id -u)/com.marc4data.worldcup.etl   # run now
+bash scripts/local_etl.sh                          # or run on demand any time
+```
+
+Log: `~/Library/Logs/worldcup_etl.log`. The job stages only the generated data
+artifacts (so in-progress code edits are never touched) and aborts before any
+commit if ingest/integrity fails.
+
+**Cloud fallback.** `.github/workflows/daily_ingest.yml` still exists for on-demand
+runs (`gh workflow run daily_ingest.yml`, e.g. when the laptop is off), but its
+scheduled trigger is disabled. The Excel is also readable straight from GitHub:
+`https://raw.githubusercontent.com/marc4data/world-cup-2026/main/reports/worldcup_tables.xlsx`
 
 ## Visual iteration on HTML graphics
 
