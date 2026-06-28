@@ -30,6 +30,11 @@ export PYTHONPATH="$REPO/src"
 if ! "$PY" src/ingest.py --mode incremental >>"$LOG" 2>&1; then
   log "INGEST FAILED — aborting (no commit)"; exit 1
 fi
+# Player stats (goals, ratings, events) — daily cadence comes from running here
+# every cycle. Best-effort: a player-stat hiccup must not block the scores refresh.
+if ! "$PY" src/players_ingest.py --mode both >>"$LOG" 2>&1; then
+  log "players_ingest warning (continuing without it)"
+fi
 "$PY" src/export_excel.py >>"$LOG" 2>&1 || log "excel export warning"
 "$PY" src/report_html.py  >>"$LOG" 2>&1 || log "html render warning"
 log "pipeline complete"

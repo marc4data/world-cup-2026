@@ -1,14 +1,14 @@
-name: Weekly Player Stats
+name: Player Stats (manual / fallback)
 
-# Phase 2 player pulls run on their own (weekly) cadence — kept off the daily job
-# so the larger /players + /fixtures/players calls don't run every day. Refreshes
-# player / player_season_stat / fixture_player_stat, regenerates the Excel export,
-# and commits. Fails (and commits nothing) if integrity checks fail.
+# Player pulls (player / player_season_stat / fixture_player_stat) now run DAILY
+# as part of the local pipeline (scripts/local_etl.sh) — that's the reliable path
+# and it keeps a single source of truth (a separate cloud pusher would be clobbered
+# by the local `git pull -X ours`, losing the player data). The scheduled trigger
+# here is therefore DISABLED; kept for on-demand cloud runs only.
+#   schedule:
+#     - cron: "0 6 * * 1"   # was: Mondays 06:00 UTC (weekly)
 
 on:
-  schedule:
-    # Mondays 06:00 UTC.
-    - cron: "0 6 * * 1"
   workflow_dispatch:
     inputs:
       mode:

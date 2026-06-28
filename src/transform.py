@@ -34,6 +34,10 @@ GROUP_RE = re.compile(r"^Group [A-L]$")
 
 
 # --- venues (from the static geo lookup) -----------------------------------
+# Stadiums the API renamed mid-tournament: {old name -> current CSV name}.
+_VENUE_NAME_ALIASES = {"Estadio BBVA": "Estadio Banorte"}  # Monterrey (renamed 2025)
+
+
 def load_venue_rows(csv_path=VENUES_GEO_CSV) -> tuple[list[dict], dict[str, int]]:
     """Return (venue rows with stable venue_id, name->venue_id map).
 
@@ -60,6 +64,11 @@ def load_venue_rows(csv_path=VENUES_GEO_CSV) -> tuple[list[dict], dict[str, int]
                 "description": e.get("description") or None,
             })
             name_to_id[r["name"]] = i
+    # Venue-name aliases: the API renamed some stadiums mid-tournament. Map the
+    # old name(s) to the same venue_id so fixtures match under either name.
+    for old, current in _VENUE_NAME_ALIASES.items():
+        if current in name_to_id:
+            name_to_id.setdefault(old, name_to_id[current])
     return rows, name_to_id
 
 
