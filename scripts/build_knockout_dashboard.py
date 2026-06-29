@@ -558,6 +558,16 @@ header.top .sub{font-size:12px;color:#c3d0e0;margin-top:2px}
   margin-top:3px;padding-top:3px;border-top:1px solid #eef1f5;font-size:9.5px;color:var(--muted)}
 .mcard .mfoot{white-space:nowrap}
 .mcard .mfoot .rgt{display:inline-flex;align-items:center;gap:6px;min-width:0}
+/* match status (computed client-side): complete vs kicks-off-within-24h */
+.mcard.done{border-left:3px solid #2e8b57}
+.mcard.soon{border-left:3px solid #e8731c}
+.mcard .mf-l{display:inline-flex;align-items:center;gap:4px}
+.st{font-weight:900;line-height:1;font-size:10px}
+.st.done{color:#2e8b57}
+.st.soon{color:#e8731c;animation:wc-pulse 1.4s ease-in-out infinite}
+@keyframes wc-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.blegend{float:right;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0}
+.blegend .st{margin:0 2px 0 9px}
 .mcard .mfoot .city{overflow:hidden;text-overflow:ellipsis}
 .mcard .mfoot .wx{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 .mcard .mfoot svg{width:11px;height:11px;display:block}
@@ -730,9 +740,20 @@ function buildRounds(){
 
 function code(t){ return esc((t&&t.code)|| (t&&t.name||'TBD').slice(0,3).toUpperCase()); }
 function teamHd(tid,name,side){ return `<div class="miniteam ${side}">${logo(T[tid])}<span>${esc(name)}</span></div>`; }
+// Match status from the viewer's clock (so it stays right between rebuilds):
+// 'done' = finished; 'soon' = kicks off within the next 24h (or just kicked off).
+function mstatus(m){
+  if(m.finished) return 'done';
+  if(m.kickoff){ const t=new Date(m.kickoff).getTime(), now=Date.now();
+    if(t<=now+864e5 && t>=now-108e5) return 'soon'; }
+  return '';
+}
 function matchCard(m){
   const h=T[m.home_id], a=T[m.away_id];
   const fin=m.finished;
+  const ms=mstatus(m);
+  const stIcon = ms==='done' ? '<span class="st done" title="Complete">✓</span>'
+               : ms==='soon' ? '<span class="st soon" title="Kicks off within 24h">●</span>' : '';
   const hw=fin&&m.home_goals>m.away_goals, aw=fin&&m.away_goals>m.home_goals;
   const pr=m.prediction;
   const hp=pr?pr.home:null, ap=pr?pr.away:null, dp=pr?pr.draw:null;
@@ -744,10 +765,10 @@ function matchCard(m){
   const wx=m.weather; let wxhtml='';
   if(wx){ const f=tempF(wx.temp_c); wxhtml=`<span class="wx" title="${esc(wx.summary||'')}">${wxIcon(wx.code)}${f!=null?f+'°':''}</span>`; }
   const drawTxt = dp!=null?`draw ${dp}%`:'';
-  return `<div class="mcard ${selFixture===m.fixture_id?'sel':''}" onclick="select(${m.fixture_id})">
+  return `<div class="mcard ${ms} ${selFixture===m.fixture_id?'sel':''}" onclick="select(${m.fixture_id})">
     <div class="crow ${hw?'win':''}"><span>${logo(h)}</span><span class="cc">${code(h)}</span><span class="seed">${esc(m.home_seed||'')}</span>${wpH}${scH}</div>
     <div class="crow ${aw?'win':''}"><span>${logo(a)}</span><span class="cc">${code(a)}</span><span class="seed">${esc(m.away_seed||'')}</span>${wpA}${scA}</div>
-    <div class="mfoot"><span>${esc(m.kickoff_pt||'')}</span><span class="rgt">${m.venue?`<span class="city">${esc(m.venue)}</span>`:''}${wxhtml||(drawTxt?`<span>${esc(drawTxt)}</span>`:'')}</span></div>
+    <div class="mfoot"><span class="mf-l">${stIcon}${esc(m.kickoff_pt||'')}</span><span class="rgt">${m.venue?`<span class="city">${esc(m.venue)}</span>`:''}${wxhtml||(drawTxt?`<span>${esc(drawTxt)}</span>`:'')}</span></div>
   </div>`;
 }
 
@@ -758,7 +779,8 @@ function render(){
   const r=DATA.bracket[activeRound];
   const bb=document.getElementById('bracket');
   const isR32 = r.name.toLowerCase().startsWith('round of 32') && DATA.layout && DATA.layout.L && DATA.layout.L.length;
-  let html=`<div class="rnd-title">${esc(r.name)}${isR32?' — top half (left) · bottom half (right)':''}</div>`;
+  let html=`<div class="rnd-title">${esc(r.name)}${isR32?' — top half (left) · bottom half (right)':''}`
+    + `<span class="blegend"><span class="st done">✓</span>complete<span class="st soon">●</span>next 24h</span></div>`;
   if(isR32){
     const byId={}; r.matches.forEach(m=>byId[m.fixture_id]=m);
     const col=(ids)=>{
