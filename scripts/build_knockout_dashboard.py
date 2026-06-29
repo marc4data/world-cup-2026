@@ -946,28 +946,44 @@ def main():
     ap = argparse.ArgumentParser()
     here = Path(__file__).resolve().parent.parent
     ap.add_argument("--db", default=str(here / "data" / "worldcup.db"))
+    # Stable, committed, published file (fixed name -> fixed URL on GitHub Pages).
+    ap.add_argument("--repo-file", default=str(here / "reports" / "knockout_dashboard.html"),
+                    help="stable in-repo output (committed + published; fixed name)")
     ap.add_argument("--out", default=None,
-                    help="output directory (default: infographic project /output)")
+                    help="directory for an extra timestamped archive copy")
+    ap.add_argument("--no-archive", action="store_true",
+                    help="skip the timestamped archive (the daily pipeline uses this)")
     ap.add_argument("--version", default="v58")
     args = ap.parse_args()
-
-    out_dir = Path(args.out) if args.out else Path(
-        "/Users/marcalexander/automagical/world_cup_2026_soccer/output")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    ts = dt.datetime.now().strftime("%Y%m%d%H%M")
-    out_path = out_dir / f"World_Cup_2026_{args.version}_{ts}_knockout_dashboard.html"
 
     con = sqlite3.connect(args.db)
     raw = fetch(con)
     data = assemble(raw)
     html = render_html(data)
-    out_path.write_text(html, encoding="utf-8")
     con.close()
 
+    # Always write the stable in-repo file (this is what gets committed + served).
+    repo_file = Path(args.repo_file)
+    repo_file.parent.mkdir(parents=True, exist_ok=True)
+    repo_file.write_text(html, encoding="utf-8")
+    written = [repo_file]
+
+    # Optionally also drop a timestamped archive copy (default behaviour for manual
+    # runs; the daily pipeline passes --no-archive so it only refreshes the stable file).
+    if not args.no_archive:
+        out_dir = Path(args.out) if args.out else Path(
+            "/Users/marcalexander/automagical/world_cup_2026_soccer/output")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = dt.datetime.now().strftime("%Y%m%d%H%M")
+        archive = out_dir / f"World_Cup_2026_{args.version}_{ts}_knockout_dashboard.html"
+        archive.write_text(html, encoding="utf-8")
+        written.append(archive)
+
     n_matches = sum(len(r["matches"]) for r in data["bracket"])
-    print(f"OK  {out_path}")
+    for w in written:
+        print(f"OK  {w}")
     print(f"    rounds={len(data['bracket'])} matches={n_matches} teams={len(data['teams'])} "
-          f"notes={len(data['notes'])} size={out_path.stat().st_size//1024}KB")
+          f"notes={len(data['notes'])} size={repo_file.stat().st_size//1024}KB")
 
 
 if __name__ == "__main__":

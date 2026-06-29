@@ -37,12 +37,15 @@ if ! "$PY" src/players_ingest.py --mode both >>"$LOG" 2>&1; then
 fi
 "$PY" src/export_excel.py >>"$LOG" 2>&1 || log "excel export warning"
 "$PY" src/report_html.py  >>"$LOG" 2>&1 || log "html render warning"
+# Interactive knockout dashboard -> stable in-repo file (served via GitHub Pages).
+"$PY" scripts/build_knockout_dashboard.py --no-archive >>"$LOG" 2>&1 || log "dashboard build warning"
 log "pipeline complete"
 
 # 3) Commit ONLY the generated artifacts (leaves any code edits untouched).
 git add data/worldcup.db reports/worldcup_tables.xlsx \
         reports/page3_matches.html reports/page_groups.html reports/page_knockout.html \
-        reports/page_bracket.html reports/page_storylines.html reports/page_rules.html 2>>"$LOG"
+        reports/page_bracket.html reports/page_storylines.html reports/page_rules.html \
+        reports/knockout_dashboard.html 2>>"$LOG"
 if git diff --staged --quiet; then
   log "no data changes this run (nothing new finished)"
 else

@@ -66,6 +66,10 @@ jobs:
         continue-on-error: true
         run: python src/report_html.py
 
+      - name: Refresh interactive knockout dashboard
+        continue-on-error: true
+        run: python scripts/build_knockout_dashboard.py --no-archive
+
       - name: Refresh report notebooks + figures
         # Non-fatal: a notebook hiccup must never block the data commit below.
         continue-on-error: true
@@ -85,7 +89,8 @@ jobs:
                   reports/01_group_breakdown.png \
                   reports/page3_matches.html reports/page_groups.html \
                   reports/page_knockout.html reports/page_bracket.html \
-                  reports/page_storylines.html reports/page_rules.html
+                  reports/page_storylines.html reports/page_rules.html \
+                  reports/knockout_dashboard.html
           if git diff --staged --quiet; then
             echo "No data changes to commit."
           else
