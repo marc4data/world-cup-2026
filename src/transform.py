@@ -20,6 +20,7 @@ from config import (
     APIFOOTBALL_TO_FIFA_CODE,
     CUTOFF_TZ,
     ESPN_FIFA_XREF_CSV,
+    KO_VENUE_OVERRIDES_CSV,
     FIFA_ID_COMPETITION,
     FIFA_ID_SEASON,
     FIFA_ID_STAGE_GROUP,
@@ -163,12 +164,31 @@ def transform_standings(raw_standings: list[dict]) -> tuple[list[dict], dict[int
 
 
 # --- fixtures --------------------------------------------------------------
+def load_ko_venue_overrides(path=KO_VENUE_OVERRIDES_CSV) -> dict[int, str]:
+    """fixture_id -> scheduled venue name, for knockout fixtures the API hasn't
+    assigned a venue to yet. Applied only as a *fallback* in transform_fixtures:
+    if API-Football supplies a venue, that wins and the override is ignored, so a
+    later-corrected (or relocated) venue self-heals. Empty if the file is absent.
+    """
+    overrides: dict[int, str] = {}
+    if not Path(path).exists():
+        return overrides
+    with open(path, newline="") as fh:
+        for r in csv.DictReader(fh):
+            try:
+                overrides[int(r["fixture_id"])] = r["venue_name"].strip()
+            except (KeyError, ValueError, AttributeError):
+                continue
+    return overrides
+
+
 def transform_fixtures(
     raw_fixtures: list[dict],
     team_to_group: dict[int, str],
     venue_name_to_id: dict[str, int],
     *,
     cutoff_date: date | None = None,
+    ko_venue_overrides: dict[int, str] | None = None,
 ) -> tuple[list[dict], set[str]]:
     """Return (fixture rows, set of unmatched venue names).
 
@@ -176,9 +196,16 @@ def transform_fixtures(
     before the cutoff day (spec §3.3) — today's completed matches count, but
     future-dated fixtures never do. group_label is set only when both teams share a
     real group (group-stage matches); knockouts stay NULL.
+
+    Knockout venue fallback: newly-drawn KO fixtures often arrive from the API with
+    no venue for a day or two. When that happens we fill venue_id from the scheduled
+    venue in `ko_venue_overrides` (data/ko_venue_overrides.csv) so venue + weather
+    render immediately. The API's venue always takes precedence once it appears.
     """
     if cutoff_date is None:
         cutoff_date = datetime.now(CUTOFF_TZ).date()
+    if ko_venue_overrides is None:
+        ko_venue_overrides = load_ko_venue_overrides()
     out, unmatched = [], set()
     for f in raw_fixtures:
         fx = f["fixture"]
@@ -196,6 +223,11 @@ def transform_fixtures(
         venue_id = venue_name_to_id.get(vname)
         if vname and venue_id is None:
             unmatched.add(vname)
+        # Fallback for KO fixtures the API hasn't given a venue yet (API wins if set).
+        if venue_id is None:
+            ov_name = ko_venue_overrides.get(fx["id"])
+            if ov_name:
+                venue_id = venue_name_to_id.get(ov_name)
 
         score = f.get("score", {}) or {}
         out.append({

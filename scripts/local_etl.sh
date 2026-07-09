@@ -41,6 +41,20 @@ fi
 "$PY" scripts/build_knockout_dashboard.py --no-archive >>"$LOG" 2>&1 || log "dashboard build warning"
 log "pipeline complete"
 
+# 2b) Refresh the ESPN bracket tracker off the now-fresh worldcup.db. tracker.py
+#     re-pulls venues + weather from the DB (its 4b step) before building digests,
+#     so the bracket weather tracks the incremental. Best-effort — a bracket hiccup
+#     must never block or fail the World Cup ETL. Subshell keeps cwd for the git
+#     steps below unaffected. (This repo's venv has requests, which the bracket needs.)
+BRACKET_REPO="/Users/marcalexander/projects/ai_orchestrator_claude/world_cup_soccer_2026_espn_bracket"
+if [ -d "$BRACKET_REPO" ]; then
+  if ( cd "$BRACKET_REPO" && "$PY" tracker.py >>"$LOG" 2>&1 ); then
+    log "bracket tracker refreshed"
+  else
+    log "bracket tracker warning (continuing)"
+  fi
+fi
+
 # 3) Commit ONLY the generated artifacts (leaves any code edits untouched).
 git add data/worldcup.db reports/worldcup_tables.xlsx \
         reports/page3_matches.html reports/page_groups.html reports/page_knockout.html \

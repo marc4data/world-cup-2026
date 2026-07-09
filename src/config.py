@@ -44,6 +44,7 @@ VENUES_GEO_CSV = REPO_ROOT / "data" / "venues_geo.csv"
 VENUES_ENRICH_CSV = REPO_ROOT / "data" / "venues_enrich.csv"   # ER-4 (static, fetched)
 TEAM_HISTORY_CSV = REPO_ROOT / "data" / "team_history.csv"
 ESPN_FIFA_XREF_CSV = REPO_ROOT / "data" / "espn_fifa_xref.csv"  # ER-8 (static, committed)
+KO_VENUE_OVERRIDES_CSV = REPO_ROOT / "data" / "ko_venue_overrides.csv"  # KO fixtures whose venue the API hasn't set yet (fallback; API wins once present)
 
 # --- ESPN / FIFA match cross-reference (ER-8) ------------------------------
 # URL-template path components (FIFA match-centre / API) + ESPN league slug.
