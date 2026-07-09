@@ -174,7 +174,8 @@ def agg_players(rows):
                                  "minutes": 0, "goals": 0, "assists": 0, "ratings": []}
         if r["pos"]:
             d["pos"][r["pos"]] += 1
-        d["apps"] += 1
+        if r["minutes"] > 0:        # count only games actually played (on the pitch)
+            d["apps"] += 1
         d["starts"] += r["starter"]
         d["minutes"] += r["minutes"]
         d["goals"] += r["goals"]
@@ -211,6 +212,38 @@ def agg_tstats(rows):
 # Extraction
 # ----------------------------------------------------------------------------
 
+def _espn_ko_urls(con) -> dict:
+    """Best-effort ESPN match URLs for knockout fixtures (worldcup.db carries ESPN
+    IDs for group games only). Sourced from the sibling ESPN bracket project's
+    cached challenge.json, matched to fixtures by team-code pair. The pairing comes
+    from a proposition's two possibleOutcomes, or (later rounds) its actualOutcomeIds.
+    Returns {fixture_id: url}; empty if the file isn't available (graceful)."""
+    base = Path(__file__).resolve().parents[2] / "world_cup_soccer_2026_espn_bracket" / "data" / "raw"
+    files = sorted(base.glob("*/challenge.json")) if base.exists() else []
+    if not files:
+        return {}
+    try:
+        props = json.loads(files[-1].read_text()).get("propositions", [])
+    except (OSError, ValueError):
+        return {}
+    alias = {"COD": "CGO"}   # gambit vs DB team-code diff
+    kfix = {frozenset({r["h"], r["a"]}): r["fid"] for r in con.execute(
+        "SELECT f.fixture_id fid, ht.code h, at.code a FROM fixture f "
+        "JOIN team ht ON ht.team_id=f.home_team_id JOIN team at ON at.team_id=f.away_team_id "
+        "WHERE f.round NOT LIKE 'Group%'")}
+    out = {}
+    for pr in props:
+        outs = {o["id"]: o.get("abbrev") for o in pr.get("possibleOutcomes", [])}
+        codes = set(outs.values()) if len(outs) == 2 else \
+            {outs.get(i) for i in (pr.get("actualOutcomeIds") or []) if outs.get(i)}
+        url = next((m["value"] for m in pr.get("mappings", []) if m["type"] == "URL_DESKTOP"), None)
+        if url and len(codes) == 2:
+            fid = kfix.get(frozenset(alias.get(c, c) for c in codes))
+            if fid:
+                out[fid] = url
+    return out
+
+
 def fetch(con: sqlite3.Connection):
     con.row_factory = sqlite3.Row
     cur = con.cursor
@@ -241,13 +274,41 @@ def fetch(con: sqlite3.Connection):
         if r["team_id"] in teams:
             teams[r["team_id"]]["group"] = r["group_label"]
 
+    # Match milestone flags: extra time (AET/PEN), penalty shootout (PEN), and an
+    # open-play goal in overage time (2nd-half stoppage or extra time). Shootout
+    # kicks (stored at minute 120 in PEN matches) are NOT overage goals.
+    match_flags = {}
+    fstatus = {r["fixture_id"]: r["status_short"]
+               for r in con.execute("SELECT fixture_id, status_short FROM fixture")}
+    overage = set()
+    try:
+        for r in con.execute(
+            "SELECT e.fixture_id, e.minute, e.extra, f.status_short st "
+            "FROM event e JOIN fixture f ON f.fixture_id = e.fixture_id "
+            "WHERE e.type='Goal' AND e.detail != 'Missed Penalty'"
+        ):
+            # Overage-time goal = scored in added/injury time (event.extra is set).
+            # Penalty-shootout kicks (minute 120 in a PEN match) are not open play.
+            in_added_time = r["extra"] is not None
+            is_shootout = r["st"] == "PEN" and (r["minute"] or 0) >= 120
+            if in_added_time and not is_shootout:
+                overage.add(r["fixture_id"])
+    except sqlite3.OperationalError:
+        pass   # event table absent -> overage flag simply stays off (graceful)
+    for fid, st in fstatus.items():
+        match_flags[fid] = {"et": st in ("AET", "PEN"), "pk": st == "PEN",
+                            "otg": fid in overage}
+
+    espn_ko = _espn_ko_urls(con)   # knockout ESPN links (best-effort, sibling project)
+
     # Per-team match log (all finished matches so far)
     match_log = defaultdict(list)
     q = """
         SELECT f.fixture_id, f.round, f.kickoff_utc, f.home_team_id, f.away_team_id,
                f.home_goals, f.away_goals, f.is_finished,
                v.city AS venue_city, v.name AS venue_name,
-               w.temp_c AS wx_temp, w.code AS wx_code, w.summary AS wx_summary
+               w.temp_c AS wx_temp, w.code AS wx_code, w.summary AS wx_summary,
+               f.espn_summary_url
         FROM fixture f
         LEFT JOIN venue v ON v.venue_id = f.venue_id
         LEFT JOIN weather w ON w.fixture_id = f.fixture_id
@@ -273,6 +334,8 @@ def fetch(con: sqlite3.Connection):
                 "gf": gf, "ga": ga, "res": res,
                 "venue": r["venue_city"] or r["venue_name"] or "",
                 "wx": wx,
+                "flags": match_flags.get(r["fixture_id"], {}),
+                "links": {"espn": r["espn_summary_url"] or espn_ko.get(r["fixture_id"])},
             })
 
     # Player stats — raw per-appearance rows tagged with round, so aggregates can
@@ -333,7 +396,7 @@ def fetch(con: sqlite3.Connection):
                f.home_team_id, f.away_team_id, f.home_goals, f.away_goals, f.score_ft,
                v.city AS venue_city, v.name AS venue_name,
                w.temp_c AS wx_temp, w.code AS wx_code, w.summary AS wx_summary,
-               w.precip_mm AS wx_precip
+               w.precip_mm AS wx_precip, f.espn_summary_url
         FROM fixture f
         LEFT JOIN venue v ON v.venue_id = f.venue_id
         LEFT JOIN weather w ON w.fixture_id = f.fixture_id
@@ -355,6 +418,8 @@ def fetch(con: sqlite3.Connection):
             "venue": r["venue_city"] or r["venue_name"] or "",
             "weather": wx,
             "prediction": preds.get(r["fixture_id"]),
+            "flags": match_flags.get(r["fixture_id"], {}),
+            "links": {"espn": r["espn_summary_url"] or espn_ko.get(r["fixture_id"])},
         })
 
     bracket = []
@@ -583,7 +648,7 @@ def assemble(raw):
     return {
         "meta": {
             "generated": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-            "source": "worldcup.db (API-Football)",
+            "source": "API-Football",
         },
         "teams": raw["teams"],
         "summaries": summaries,
@@ -707,8 +772,8 @@ header.top .sub{font-size:12px;color:#c3d0e0;margin-top:2px}
 .sec{padding:13px 16px;border-bottom:1px solid var(--line)}
 .sec h3{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--navy);font-weight:700;
   background:#fafbfd;border:1px solid var(--line);border-radius:6px;padding:6px 10px;margin-bottom:10px}
-.statgrid{display:grid;grid-template-columns:1fr auto 1fr;gap:4px 10px;align-items:center;font-size:12.5px}
-.statgrid .lbl{text-align:center;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px}
+.statgrid{display:grid;grid-template-columns:auto 40px 1fr 40px;gap:3px 8px;align-items:center;font-size:12px}
+.statgrid .slbl{text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
 .statgrid .lv{text-align:right;font-weight:700}
 .statgrid .rv{text-align:left;font-weight:700}
 .statgrid .barwrap{display:flex;gap:0;height:7px;border-radius:4px;overflow:hidden;background:#eef1f5}
@@ -732,6 +797,17 @@ table.mini svg{width:12px;height:12px;flex:none;vertical-align:middle}
 .pill{display:inline-block;width:15px;height:15px;border-radius:3px;color:#fff;font-size:9px;
   font-weight:800;text-align:center;line-height:15px;margin-right:2px}
 .pW{background:var(--win)}.pD{background:var(--draw)}.pL{background:var(--loss)}
+.mflag{display:inline-block;width:8px;height:8px;margin:0 1px;vertical-align:middle}
+.mflag.otg{border-radius:2px;background:var(--gold)}        /* gold square  */
+.mflag.et{border-radius:50%;background:#2f6db5}             /* blue circle  */
+.mflag.pk{width:6px;height:6px;background:#c0504d;transform:rotate(45deg)}  /* red diamond */
+.blegend .mflag{margin:0 3px 0 10px}
+table.mini td.fl,table.mini th.fl{text-align:center;white-space:nowrap;padding:3px 6px}
+.mgl{display:inline-block;vertical-align:middle;line-height:1;text-decoration:none;
+  font-size:9px;font-weight:800;color:#b1060f}
+.mgl img{width:12px;height:12px;display:block;border-radius:2px}
+.mgl:hover{filter:brightness(1.1)}
+table.mini td.lk,table.mini th.lk{text-align:center;white-space:nowrap;padding:3px 4px}
 .rating{font-weight:800;padding:1px 5px;border-radius:4px;color:#fff;font-size:11px}
 .rbar{display:inline-flex;align-items:center;gap:6px;justify-content:flex-start}
 .rbar .track{position:relative;width:50px;height:7px;background:#eef1f5;border-radius:3px}
@@ -760,7 +836,12 @@ table.mini svg{width:12px;height:12px;flex:none;vertical-align:middle}
 .xi-chip{font-size:10.5px;background:#eef2f7;border:1px solid var(--line);border-radius:6px;padding:2px 6px}
 .xi-chip .pos{color:var(--gold);font-weight:800;font-size:9px}
 .legend{font-size:10px;color:var(--muted);margin-top:4px}
-footer{color:var(--muted);font-size:11px;text-align:center;padding:14px}
+footer{color:var(--muted);font-size:11px;padding:14px;display:flex;justify-content:space-between;
+  align-items:baseline;gap:6px 16px;flex-wrap:wrap}
+footer .fgen{white-space:nowrap;margin-left:auto}
+footer .credit{color:var(--navy)}
+footer .credit a{color:var(--navy);font-weight:700;text-decoration:none;border-bottom:1px solid var(--gold)}
+footer .credit a:hover{color:var(--gold)}
 .tag{display:inline-block;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:4px;background:var(--navy);color:#fff}
 </style>
 </head>
@@ -803,7 +884,7 @@ function defaultRound(){
   return Math.max(0, DATA.bracket.length-1);
 }
 let activeRound = defaultRound(), selFixture = null;
-let RSCALE = null;   // {min,max} rating range of the selected tie's round (all its teams)
+let RSCALE = null;   // {min,max} rating range of the selected match's round (all its teams)
 
 function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function logo(t){
@@ -811,20 +892,23 @@ function logo(t){
   return `<span class="flag-fallback">${esc((t&&t.code||'').slice(0,3))}</span>`;
 }
 function rtg(r){ return r==null?'—':Number(r).toFixed(1); }
-// Rating bar scaled to the round's field: 0% = lowest-rated player across all
-// teams in this round, 100% = highest. Filled in the team's colour (navy home /
-// gold away, matching the team-name underline); the number stays plain text.
-function ratingBar(r, color){
-  if(r==null) return '<span class="rbar"><span class="rv" style="color:var(--muted)">—</span></span>';
-  const sc = (RSCALE && RSCALE.max>RSCALE.min) ? RSCALE : {min:5,max:9};
-  const pos = Math.max(0, Math.min(1, (r-sc.min)/(sc.max-sc.min)));
-  const pct = Math.round(pos*100);
-  const col = color || 'var(--navy)';
-  const tip = `${Number(r).toFixed(1)} · round field ${Number(sc.min).toFixed(1)}–${Number(sc.max).toFixed(1)}`;
-  return `<span class="rbar" title="${tip}"><span class="track">`
+// Generic scaled bar: value plotted in [lo,hi], filled in the team colour with a
+// tick; number plain text. Used for Rating (round field) and MIN/GM (0..max).
+function barCell(val, lo, hi, color, dec, tip){
+  if(val==null) return '<span class="rbar"><span class="rv" style="color:var(--muted)">—</span></span>';
+  const span=(hi>lo)?(hi-lo):1;
+  const pct=Math.round(Math.max(0,Math.min(1,(val-lo)/span))*100);
+  const col=color||'var(--navy)';
+  return `<span class="rbar" title="${tip||''}"><span class="track">`
     + `<span class="fill" style="width:${Math.max(4,pct)}%;background:${col}"></span>`
     + `<span class="mark" style="left:calc(${pct}% - 1px);background:${col}"></span>`
-    + `</span><span class="rv">${Number(r).toFixed(1)}</span></span>`;
+    + `</span><span class="rv">${Number(val).toFixed(dec)}</span></span>`;
+}
+// Rating: scaled to the round's field (min/max across all its teams).
+function ratingBar(r, color){
+  const sc=(RSCALE&&RSCALE.max>RSCALE.min)?RSCALE:{min:5,max:9};
+  const tip=(r==null)?'':`${Number(r).toFixed(1)} · round field ${Number(sc.min).toFixed(1)}–${Number(sc.max).toFixed(1)}`;
+  return barCell(r, sc.min, sc.max, color, 1, tip);
 }
 function tempF(c){ return c==null?null:Math.round(c*9/5+32); }
 function wxIcon(code){
@@ -897,19 +981,19 @@ function matchCard(m){
   return `<div class="mcard ${ms} ${selFixture===m.fixture_id?'sel':''}" onclick="select(${m.fixture_id})">
     <div class="crow ${hw?'win':''}"><span>${logo(h)}</span><span class="cc">${code(h)}</span><span class="seed">${esc(m.home_seed||'')}</span>${wpH}${scH}</div>
     <div class="crow ${aw?'win':''}"><span>${logo(a)}</span><span class="cc">${code(a)}</span><span class="seed">${esc(m.away_seed||'')}</span>${wpA}${scA}</div>
-    <div class="mfoot"><span class="mf-l">${stIcon}${esc(m.kickoff_pt||'')}</span><span class="rgt">${m.venue?`<span class="city">${esc(m.venue)}</span>`:''}${wxhtml||(drawTxt?`<span>${esc(drawTxt)}</span>`:'')}</span></div>
+    <div class="mfoot"><span class="mf-l">${stIcon}${esc(m.kickoff_pt||'')}${flagIcons(m.flags)}</span><span class="rgt">${m.venue?`<span class="city">${esc(m.venue)}</span>`:''}${wxhtml||(drawTxt?`<span>${esc(drawTxt)}</span>`:'')}${matchLinks(m.links)}</span></div>
   </div>`;
 }
 
 function render(){
   buildRounds();
   document.getElementById('subline').textContent =
-    `Group stage complete · ${DATA.bracket[0]?DATA.bracket[0].matches.length:0} Round-of-32 ties drawn · data ${DATA.meta.generated}`;
+    `Group stage complete · ${DATA.bracket[0]?DATA.bracket[0].matches.length:0} Round-of-32 matchups set · data ${DATA.meta.generated}`;
   const r=DATA.bracket[activeRound];
   const bb=document.getElementById('bracket');
   const isR32 = r.name.toLowerCase().startsWith('round of 32') && DATA.layout && DATA.layout.L && DATA.layout.L.length;
   let html=`<div class="rnd-title">${esc(r.name)}${isR32?' — top half (left) · bottom half (right)':''}`
-    + `<span class="blegend"><span class="st done">✓</span>complete<span class="st soon">●</span>next 24h</span></div>`;
+    + `<span class="blegend"><span class="st done">✓</span>complete<span class="st soon">●</span>next 24h${flagLegend()}</span></div>`;
   if(isR32){
     const byId={}; r.matches.forEach(m=>byId[m.fixture_id]=m);
     const col=(ids)=>{
@@ -926,16 +1010,23 @@ function render(){
     html+=`<div class="matches">`+r.matches.map(matchCard).join('')+`</div>`;
   }
   bb.innerHTML=html;
-  document.getElementById('foot').textContent =
-    `Generated ${DATA.meta.generated} from ${DATA.meta.source}. Player ratings & xG via API-Football. Model odds are pre-match estimates, not predictions.`;
+  document.getElementById('foot').innerHTML =
+    `<span>Data sourced from API-Football · `
+    + `model odds are pre-match estimates, not predictions · `
+    + `<span class="credit">Built by Marc Alexander · `
+    + `<a href="https://marc4data.netlify.app/#" target="_blank" rel="noopener">Website</a> · `
+    + `<a href="https://www.linkedin.com/in/marc4data/" target="_blank" rel="noopener">LinkedIn</a></span></span>`
+    + `<span class="fgen">generated ${esc(DATA.meta.generated)}</span>`;
 }
 
+// One compact row per stat: left label · home value · share bar · away value.
 function statRow(lbl, hv, av, fmt){
   const h=hv==null?0:hv, a=av==null?0:av, tot=h+a;
   const hp=tot>0?Math.round(h/tot*100):50, ap=100-hp;
   const f=v=>v==null?'—':(fmt==='pct'?v+'%':v);
-  return `<div class="lv">${f(hv)}</div><div class="lbl">${lbl}</div><div class="rv">${f(av)}</div>
-    <div class="lv"></div><div class="barwrap"><div class="bl" style="width:${hp}%"></div><div class="br" style="width:${ap}%"></div></div><div class="rv"></div>`;
+  return `<div class="slbl">${lbl}</div><div class="lv">${f(hv)}</div>`
+    + `<div class="barwrap"><div class="bl" style="width:${hp}%"></div><div class="br" style="width:${ap}%"></div></div>`
+    + `<div class="rv">${f(av)}</div>`;
 }
 
 function formPills(matches){
@@ -953,35 +1044,53 @@ function wxCell(wx){
   const f=tempF(wx.temp_c);
   return `<span class="wx" title="${esc(wx.summary||'')}">${wxIcon(wx.code)}${f!=null?f+'°':''}</span>`;
 }
+// Match milestone flags — small coloured shapes (no letters): circle / diamond / square.
+const FLAGDEF = {otg:'overage-time goal', et:'extra time', pk:'penalties'};
+function flagIcons(fl){
+  if(!fl) return '';
+  return Object.keys(FLAGDEF).filter(k=>fl[k])
+    .map(k=>`<span class="mflag ${k}" title="${FLAGDEF[k]}"></span>`).join('');
+}
+function flagLegend(){
+  return Object.keys(FLAGDEF)
+    .map(k=>`<span class="mflag ${k}"></span>${FLAGDEF[k]}`).join(' &nbsp; ');
+}
+// Small ESPN link — the ESPN tab favicon, shrunk; falls back to a tiny "E" if the
+// icon can't load. Shown where a match URL is available.
+function matchLinks(lk){
+  if(!lk || !lk.espn) return '';
+  return `<a class="mgl" href="${lk.espn}" target="_blank" rel="noopener" title="Match on ESPN">`
+    + `<img src="https://a.espncdn.com/favicon.ico" alt="ESPN" onerror="this.outerHTML='E'"></a>`;
+}
 // Each team's path to here: opponents in the order played, score, location, weather.
 function matchTable(s){
   if(!s.matches || !s.matches.length)
     return '<div style="color:var(--muted);font-size:11.5px">No matches played yet.</div>';
-  return `<table class="mini"><thead><tr><th>Rd</th><th>Opponent</th><th class="n">Score</th><th>Location</th><th class="n">Weather</th></tr></thead><tbody>`
+  return `<table class="mini"><thead><tr><th>Rd</th><th>Opponent</th><th class="n">Score</th><th class="fl" title="milestones">•</th><th>Location</th><th class="n">Weather</th><th class="lk"></th></tr></thead><tbody>`
     + s.matches.map(m=>`<tr>
         <td style="color:var(--muted);font-weight:700">${roundAbbr(m.round)}</td>
         <td><span class="pill p${m.res}">${m.res}</span> ${esc(m.opp)}</td>
         <td class="n">${m.gf}–${m.ga}</td>
+        <td class="fl">${flagIcons(m.flags)}</td>
         <td style="color:var(--muted)">${esc(m.venue||'—')}</td>
-        <td class="n">${wxCell(m.wx)}</td></tr>`).join('')
+        <td class="n">${wxCell(m.wx)}</td>
+        <td class="lk">${matchLinks(m.links)}</td></tr>`).join('')
     + `</tbody></table>`;
 }
 // ER-9: '#10 Mbappé' when a shirt number is present, name alone otherwise.
 function pn(p){ const n=(p.number!=null)?('#'+p.number):''; return `<span class="jn">${n}</span>${esc(p.name)}`; }
-function scorerTable(s, color){
-  if(!s.scorers.length) return '<div style="color:var(--muted);font-size:11.5px">No goal contributions recorded.</div>';
-  return `<table class="mini"><thead><tr><th>Player</th><th>Pos</th><th class="n">G</th><th class="n">A</th><th class="rt" style="width:78px">Rating</th></tr></thead><tbody>`
-    + s.scorers.map(p=>`<tr><td>${pn(p)}</td><td style="color:var(--muted)">${esc(p.pos)}</td>
+function mpg(p){ return p.apps?Math.round(p.minutes/p.apps):0; }   // minutes per game played
+// Every player who's been on the pitch, sorted by goals then minutes/game.
+function squadTable(s, color){
+  const rows=(s.players||[]).filter(p=>(p.minutes||0)>0)
+    .sort((x,y)=> (y.goals-x.goals) || (mpg(y)-mpg(x)) || ((y.rating||0)-(x.rating||0)));
+  if(!rows.length) return '<div style="color:var(--muted);font-size:11.5px">No players on the pitch yet.</div>';
+  return `<table class="mini"><thead><tr><th>Player</th><th>Pos</th><th class="n">Apps</th><th class="n">St</th><th class="n">G</th><th class="n">A</th><th class="rt" style="width:74px">Rating</th><th class="n">MIN/GM</th></tr></thead><tbody>`
+    + rows.map(p=>`<tr><td>${pn(p)}</td><td style="color:var(--muted)">${esc(p.pos)}</td>
+        <td class="n">${p.apps}</td><td class="n">${p.starts}</td>
         <td class="n">${p.goals}</td><td class="n">${p.assists}</td>
-        <td class="rt">${ratingBar(p.rating, color)}</td></tr>`).join('')
-    + `</tbody></table>`;
-}
-function minutesTable(s, color){
-  const rows=s.players.slice(0,7);
-  return `<table class="mini"><thead><tr><th>Player</th><th class="n">Apps</th><th class="n">St</th><th class="n">MIN/GM</th><th class="rt" style="width:78px">Rating</th></tr></thead><tbody>`
-    + rows.map(p=>`<tr><td>${pn(p)} <span style="color:var(--muted)">${esc(p.pos)}</span></td>
-        <td class="n">${p.apps}</td><td class="n">${p.starts}</td><td class="n">${p.apps?Math.round(p.minutes/p.apps):0}</td>
-        <td class="rt">${ratingBar(p.rating, color)}</td></tr>`).join('')
+        <td class="rt">${ratingBar(p.rating, color)}</td>
+        <td class="n">${mpg(p)}</td></tr>`).join('')
     + `</tbody></table>`;
 }
 function xiChips(s){
@@ -1007,8 +1116,8 @@ function select(fid){
   if(!match) return;
   const h=S[match.home_id], a=S[match.away_id];
   const cmp=document.getElementById('cmp');
-  if(!h||!a){ cmp.innerHTML='<div class="cmp-empty">Teams not yet resolved for this tie.</div>'; return; }
-  // Profile/scouting reflect only games BEFORE this round (this tie excluded).
+  if(!h||!a){ cmp.innerHTML='<div class="cmp-empty">Teams not yet decided for this match.</div>'; return; }
+  // Profile/scouting reflect only games BEFORE this round (this match not included).
   const hp=match.hprof||{}, ap=match.aprof||{};
   RSCALE = match.rscale || null;   // scale rating bars to this round's field
   const pr=match.prediction;
@@ -1046,7 +1155,7 @@ function select(fid){
     <div class="cmp-right">
       <div class="profhd"><span class="ph">${esc(h.name)}</span><span class="pt">Form before the ${esc(roundAbbr(match.round))}</span><span class="pa">${esc(a.name)}</span></div>
       <div class="statgrid">
-        <div class="lv">${hp.w}-${hp.d}-${hp.l}</div><div class="lbl">W-D-L</div><div class="rv">${ap.w}-${ap.d}-${ap.l}</div>
+        <div class="slbl">W-D-L</div><div class="lv">${hp.w}-${hp.d}-${hp.l}</div><div></div><div class="rv">${ap.w}-${ap.d}-${ap.l}</div>
         ${statRow('Points', hp.pts, ap.pts)}
         ${statRow('Goals for', hp.gf, ap.gf)}
         ${statRow('Goals against', hp.ga, ap.ga)}
@@ -1056,7 +1165,7 @@ function select(fid){
         ${statRow('Possession', hp.poss, ap.poss,'pct')}
         ${statRow('Yellow cards', hp.yellow, ap.yellow)}
       </div>
-      <div class="legend">Games each side played <b>before</b> the ${esc(roundAbbr(match.round))} — this tie excluded. Navy = ${esc(h.name)} · Gold = ${esc(a.name)}.</div>
+      <div class="legend">Each side's games <b>before</b> the ${esc(roundAbbr(match.round))} — this match not included. Navy = ${esc(h.name)} · Gold = ${esc(a.name)}.</div>
     </div>
   </div>
 
@@ -1078,23 +1187,16 @@ function select(fid){
       <div>${teamHd(match.home_id,h.name,'home')}${matchTable(h)}</div>
       <div>${teamHd(match.away_id,a.name,'away')}${matchTable(a)}</div>
     </div>
+    <div class="legend">${flagLegend()}</div>
   </div>
 
   <div class="sec">
-    <h3>Who's scoring</h3>
+    <h3>Squad — every player used · goals, minutes & ratings</h3>
     <div class="twocol">
-      <div>${teamHd(match.home_id,h.name,'home')}${scorerTable(h,'var(--navy)')}</div>
-      <div>${teamHd(match.away_id,a.name,'away')}${scorerTable(a,'var(--gold)')}</div>
+      <div>${teamHd(match.home_id,h.name,'home')}${squadTable(h,'var(--navy)')}</div>
+      <div>${teamHd(match.away_id,a.name,'away')}${squadTable(a,'var(--gold)')}</div>
     </div>
-  </div>
-
-  <div class="sec">
-    <h3>Minutes & ratings — who's carrying the load</h3>
-    <div class="twocol">
-      <div>${teamHd(match.home_id,h.name,'home')}${minutesTable(h,'var(--navy)')}</div>
-      <div>${teamHd(match.away_id,a.name,'away')}${minutesTable(a,'var(--gold)')}</div>
-    </div>
-    <div class="legend">St = starts · MIN/GM = average minutes per appearance. Sorted by total minutes played.</div>
+    <div class="legend">Every player on the pitch, sorted by goals then minutes/game. St = starts · MIN/GM = avg minutes per game played.</div>
   </div>
 
   <div class="sec">
