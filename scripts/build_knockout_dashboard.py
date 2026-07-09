@@ -32,12 +32,12 @@ except Exception:  # pragma: no cover
 
 
 def pt_string(iso):
-    """Kickoff formatted in Pacific time, e.g. 'Sun Jun 28 · 12:00 PM PT'."""
+    """Kickoff in Pacific time, compact for the bracket card, e.g. 'Jun 28 · 12:00 PM PT'."""
     if not iso or PT is None:
         return (iso or "")[:16].replace("T", " ")
     try:
         d = dt.datetime.fromisoformat(iso).astimezone(PT)
-        s = d.strftime("%a %b %d · %I:%M %p PT")
+        s = d.strftime("%b %d · %I:%M %p PT")
         return s.replace(" 0", " ").replace("·0", "·")  # strip zero-pad
     except Exception:
         return iso[:10]
@@ -729,18 +729,18 @@ header.top .sub{font-size:12px;color:#c3d0e0;margin-top:2px}
 .mcard .mfoot{display:flex;justify-content:space-between;align-items:center;gap:6px;
   margin-top:3px;padding-top:3px;border-top:1px solid #eef1f5;font-size:9.5px;color:var(--muted)}
 .mcard .mfoot{white-space:nowrap}
-.mcard .mfoot .rgt{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.mcard .mfoot .rgt{display:inline-flex;align-items:center;gap:6px;min-width:0;flex:1 1 auto;justify-content:flex-end}
 /* match status (computed client-side): complete vs kicks-off-within-24h */
 .mcard.done{border-left:3px solid #2e8b57}
 .mcard.soon{border-left:3px solid #e8731c}
-.mcard .mf-l{display:inline-flex;align-items:center;gap:4px}
+.mcard .mf-l{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto}
 .st{font-weight:900;line-height:1;font-size:10px}
 .st.done{color:#2e8b57}
 .st.soon{color:#e8731c;animation:wc-pulse 1.4s ease-in-out infinite}
 @keyframes wc-pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .blegend{float:right;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0}
 .blegend .st{margin:0 2px 0 9px}
-.mcard .mfoot .city{overflow:hidden;text-overflow:ellipsis}
+.mcard .mfoot .city{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
 .mcard .mfoot .wx{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 .mcard .mfoot svg{width:11px;height:11px;display:block}
 .flag-fallback{width:17px;height:17px;border-radius:3px;background:var(--navy2);color:#fff;
