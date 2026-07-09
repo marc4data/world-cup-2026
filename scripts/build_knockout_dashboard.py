@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -132,6 +133,80 @@ def round_rank(name: str) -> int:
     return 99
 
 
+def round_seq(name: str) -> int:
+    """Monotonic tournament order: Group 1/2/3 -> 0/1/2, R32=3, R16=4, QF=5,
+    SF=6, 3rd=7, Final=8. Distinct from round_rank(), which collides R16 with R32
+    and puts group stages at 99 — unusable for a chronological cutoff."""
+    n = (name or "").lower()
+    if n.startswith("group"):
+        m = re.search(r"(\d+)", n)
+        return (int(m.group(1)) - 1) if m else 0
+    if "32" in n:
+        return 3
+    if "16" in n:
+        return 4
+    if n.startswith("quarter"):
+        return 5
+    if n.startswith("semi"):
+        return 6
+    if n.startswith("third") or n.startswith("3rd"):
+        return 7
+    if n.startswith("final"):
+        return 8
+    return 99
+
+
+_POS_ORDER = {"G": 0, "D": 1, "M": 2, "F": 3}
+
+
+def best_pos(posd):
+    return max(posd.items(), key=lambda kv: kv[1])[0] if posd else ""
+
+
+def agg_players(rows):
+    """Aggregate raw per-appearance rows into per-player season/rolling totals."""
+    byp = {}
+    for r in rows:
+        d = byp.get(r["pid"])
+        if d is None:
+            d = byp[r["pid"]] = {"id": r["pid"], "name": r["name"], "number": r["number"],
+                                 "pos": defaultdict(int), "apps": 0, "starts": 0,
+                                 "minutes": 0, "goals": 0, "assists": 0, "ratings": []}
+        if r["pos"]:
+            d["pos"][r["pos"]] += 1
+        d["apps"] += 1
+        d["starts"] += r["starter"]
+        d["minutes"] += r["minutes"]
+        d["goals"] += r["goals"]
+        d["assists"] += r["assists"]
+        if r["rating"] is not None and r["rating"] > 0:   # 0.0 = "not rated" sentinel
+            d["ratings"].append(r["rating"])
+    out = []
+    for d in byp.values():
+        avg = round(sum(d["ratings"]) / len(d["ratings"]), 1) if d["ratings"] else None
+        out.append({"id": d["id"], "name": d["name"], "number": d["number"],
+                    "pos": best_pos(d["pos"]), "apps": d["apps"], "starts": d["starts"],
+                    "minutes": d["minutes"], "goals": d["goals"], "assists": d["assists"],
+                    "rating": avg})
+    return out
+
+
+def agg_tstats(rows):
+    """Aggregate raw per-match team-stat rows (sums, plus avg possession)."""
+    if not rows:
+        return {}
+    def s(k):
+        return sum((row[k] or 0) for row in rows)
+    poss = [row["poss"] for row in rows if row["poss"] is not None]
+    xg = [row["xg"] for row in rows if row["xg"] is not None]
+    return {
+        "gp": len(rows), "shots": s("shots"), "shots_on": s("shots_on"),
+        "poss": round(sum(poss) / len(poss), 1) if poss else None,
+        "fouls": s("fouls"), "corners": s("corners"), "yellow": s("yellow"),
+        "red": s("red"), "xg": round(sum(xg), 2) if xg else None, "saves": s("saves"),
+    }
+
+
 # ----------------------------------------------------------------------------
 # Extraction
 # ----------------------------------------------------------------------------
@@ -170,12 +245,18 @@ def fetch(con: sqlite3.Connection):
     match_log = defaultdict(list)
     q = """
         SELECT f.fixture_id, f.round, f.kickoff_utc, f.home_team_id, f.away_team_id,
-               f.home_goals, f.away_goals, f.is_finished, v.city AS venue_city, v.name AS venue_name
-        FROM fixture f LEFT JOIN venue v ON v.venue_id = f.venue_id
+               f.home_goals, f.away_goals, f.is_finished,
+               v.city AS venue_city, v.name AS venue_name,
+               w.temp_c AS wx_temp, w.code AS wx_code, w.summary AS wx_summary
+        FROM fixture f
+        LEFT JOIN venue v ON v.venue_id = f.venue_id
+        LEFT JOIN weather w ON w.fixture_id = f.fixture_id
         WHERE f.is_finished = 1
         ORDER BY f.kickoff_utc
     """
     for r in con.execute(q):
+        wx = ({"temp_c": round(r["wx_temp"], 1), "code": r["wx_code"],
+               "summary": r["wx_summary"]} if r["wx_temp"] is not None else None)
         for side in ("home", "away"):
             tid = r[f"{side}_team_id"]
             opp = r["away_team_id"] if side == "home" else r["home_team_id"]
@@ -191,16 +272,15 @@ def fetch(con: sqlite3.Connection):
                 "opp_code": teams.get(opp, {}).get("code", ""),
                 "gf": gf, "ga": ga, "res": res,
                 "venue": r["venue_city"] or r["venue_name"] or "",
+                "wx": wx,
             })
 
-    # Player aggregates per team (finished matches)
-    pagg = defaultdict(lambda: defaultdict(lambda: {
-        "name": "", "pos": defaultdict(int), "apps": 0, "starts": 0,
-        "minutes": 0, "goals": 0, "assists": 0, "ratings": [],
-    }))
+    # Player stats — raw per-appearance rows tagged with round, so aggregates can
+    # be re-cut to "games before round X" for the round-scoped scouting profile.
+    pstat_rows = defaultdict(list)
     q = """
         SELECT ps.team_id, ps.player_id, p.name, ps.minutes, ps.position, ps.rating,
-               ps.is_starter, ps.goals, ps.assists, sq.number AS shirt
+               ps.is_starter, ps.goals, ps.assists, sq.number AS shirt, f.round
         FROM fixture_player_stat ps
         JOIN player p ON p.player_id = ps.player_id
         JOIN fixture f ON f.fixture_id = ps.fixture_id
@@ -208,62 +288,31 @@ def fetch(con: sqlite3.Connection):
         WHERE f.is_finished = 1
     """
     for r in con.execute(q):
-        d = pagg[r["team_id"]][r["player_id"]]
-        d["name"] = r["name"]
-        d["number"] = r["shirt"]        # shirt number (ER-9); may be None
-        if r["position"]:
-            d["pos"][r["position"]] += 1
-        d["apps"] += 1
-        d["starts"] += int(r["is_starter"] or 0)
-        d["minutes"] += int(r["minutes"] or 0)
-        d["goals"] += int(r["goals"] or 0)
-        d["assists"] += int(r["assists"] or 0)
-        if r["rating"] is not None:
-            d["ratings"].append(float(r["rating"]))
+        pstat_rows[r["team_id"]].append({
+            "round": r["round"], "pid": r["player_id"], "name": r["name"],
+            "number": r["shirt"], "pos": r["position"], "minutes": int(r["minutes"] or 0),
+            "goals": int(r["goals"] or 0), "assists": int(r["assists"] or 0),
+            "rating": float(r["rating"]) if r["rating"] is not None else None,
+            "starter": int(r["is_starter"] or 0),
+        })
+    players_by_team = {tid: agg_players(rows) for tid, rows in pstat_rows.items()}
 
-    POS_ORDER = {"G": 0, "D": 1, "M": 2, "F": 3}
-
-    def best_pos(posd):
-        if not posd:
-            return ""
-        return max(posd.items(), key=lambda kv: kv[1])[0]
-
-    players_by_team = {}
-    for tid, players in pagg.items():
-        rows = []
-        for pid, d in players.items():
-            avg = round(sum(d["ratings"]) / len(d["ratings"]), 1) if d["ratings"] else None
-            rows.append({
-                "id": pid, "name": d["name"], "pos": best_pos(d["pos"]),
-                "apps": d["apps"], "starts": d["starts"], "minutes": d["minutes"],
-                "goals": d["goals"], "assists": d["assists"], "rating": avg,
-                "number": d.get("number"),     # shirt number (ER-9); may be None
-            })
-        players_by_team[tid] = rows
-
-    # Team stat aggregates (finished matches)
-    tstats = {}
+    # Team stats — raw per-match rows tagged with round (same re-cut purpose).
+    tstat_rows = defaultdict(list)
     q = """
-        SELECT ts.team_id,
-               COUNT(*) AS gp,
-               SUM(ts.shots_total) AS shots, SUM(ts.shots_on) AS shots_on,
-               AVG(ts.possession) AS poss, SUM(ts.fouls) AS fouls,
-               SUM(ts.corners) AS corners, SUM(ts.yellow) AS yellow,
-               SUM(ts.red) AS red, SUM(ts.xg) AS xg, SUM(ts.saves) AS saves
+        SELECT ts.team_id, f.round, ts.shots_total, ts.shots_on, ts.possession,
+               ts.fouls, ts.corners, ts.yellow, ts.red, ts.xg, ts.saves
         FROM fixture_team_stat ts
         JOIN fixture f ON f.fixture_id = ts.fixture_id
         WHERE f.is_finished = 1
-        GROUP BY ts.team_id
     """
     for r in con.execute(q):
-        tstats[r["team_id"]] = {
-            "gp": r["gp"], "shots": r["shots"] or 0, "shots_on": r["shots_on"] or 0,
-            "poss": round(r["poss"], 1) if r["poss"] is not None else None,
-            "fouls": r["fouls"] or 0, "corners": r["corners"] or 0,
-            "yellow": r["yellow"] or 0, "red": r["red"] or 0,
-            "xg": round(r["xg"], 2) if r["xg"] is not None else None,
-            "saves": r["saves"] or 0,
-        }
+        tstat_rows[r["team_id"]].append({
+            "round": r["round"], "shots": r["shots_total"], "shots_on": r["shots_on"],
+            "poss": r["possession"], "fouls": r["fouls"], "corners": r["corners"],
+            "yellow": r["yellow"], "red": r["red"], "xg": r["xg"], "saves": r["saves"],
+        })
+    tstats = {tid: agg_tstats(rows) for tid, rows in tstat_rows.items()}
 
     # Clean sheets from match log
     clean_sheets = {tid: sum(1 for m in logs if m["ga"] == 0) for tid, logs in match_log.items()}
@@ -337,6 +386,7 @@ def fetch(con: sqlite3.Connection):
         "teams": teams, "standings": standings, "match_log": dict(match_log),
         "players": players_by_team, "tstats": tstats, "clean_sheets": clean_sheets,
         "bracket": bracket, "layout": layout,
+        "pstat_rows": dict(pstat_rows), "tstat_rows": dict(tstat_rows),
     }
 
 
@@ -395,9 +445,8 @@ def edge_notes(home, away, raw, tourney):
                 f"{st.get('win',0)}-{st.get('draw',0)}-{st.get('lose',0)}, {st.get('points',0)} pts")
 
     def n_goals(s):
-        st = s["standing"]
         cs = s["clean_sheets"]
-        base = (f"{st.get('gf',0)} scored, {st.get('ga',0)} conceded · "
+        base = (f"{s.get('gf',0)} scored, {s.get('ga',0)} conceded · "
                 f"{cs} clean sheet{'' if cs==1 else 's'}")
         xg = s["tstats"].get("xg")
         if xg is not None and s["gf"] is not None:
@@ -464,15 +513,73 @@ def build_tourney_context(raw):
     return {"max_goals": max_goals}
 
 
+def _capped_player_ratings(tid, cutoff_seq, raw):
+    """Avg ratings of a team's players using only games before cutoff_seq."""
+    players = agg_players([r for r in raw["pstat_rows"].get(tid, [])
+                           if round_seq(r["round"]) < cutoff_seq])
+    return [p["rating"] for p in players if p["rating"] is not None and p["apps"] >= 1]
+
+
+def round_rating_scale(team_ids, cutoff_seq, raw):
+    """Min/max player rating across ALL teams contesting a round, as they stood
+    going INTO it — the shared scale the rating bars are drawn against."""
+    vals = [v for tid in team_ids for v in _capped_player_ratings(tid, cutoff_seq, raw)]
+    return {"min": round(min(vals), 1), "max": round(max(vals), 1)} if vals else None
+
+
+def capped_for(tid, cutoff_seq, raw):
+    """Profile stats + scouting summary for a team from matches in rounds strictly
+    BEFORE cutoff_seq — so previewing a tie never leaks that round's (or later)
+    results. Returns (profile_for_statgrid, summary_for_edge_notes)."""
+    logs = [m for m in raw["match_log"].get(tid, []) if round_seq(m["round"]) < cutoff_seq]
+    w = sum(1 for m in logs if m["res"] == "W")
+    d = sum(1 for m in logs if m["res"] == "D")
+    losses = sum(1 for m in logs if m["res"] == "L")
+    gf = sum(m["gf"] for m in logs)
+    ga = sum(m["ga"] for m in logs)
+    cs = sum(1 for m in logs if m["ga"] == 0)
+    ts = agg_tstats([r for r in raw["tstat_rows"].get(tid, []) if round_seq(r["round"]) < cutoff_seq])
+    players = agg_players([r for r in raw["pstat_rows"].get(tid, []) if round_seq(r["round"]) < cutoff_seq])
+    scorers = sorted([p for p in players if p["goals"] > 0 or p["assists"] > 0],
+                     key=lambda p: (-p["goals"], -p["assists"]))[:6]
+    rated = [p for p in players if p["rating"] is not None and p["apps"] >= 2]
+    top_rated = sorted(rated, key=lambda p: -p["rating"])[:5]
+    profile = {
+        "w": w, "d": d, "l": losses, "pts": 3 * w + d, "gf": gf, "ga": ga, "cs": cs,
+        "xg": ts.get("xg"), "shots": ts.get("shots"), "poss": ts.get("poss"),
+        "yellow": ts.get("yellow"), "np": len(logs),
+        "form": [{"res": m["res"], "opp": m["opp"], "gf": m["gf"], "ga": m["ga"],
+                  "round": m["round"]} for m in logs],
+    }
+    summary = {  # shape consumed by edge_notes()
+        "standing": raw["standings"].get(tid, {}),   # group placement (fixed fact)
+        "clean_sheets": cs, "gf": gf, "ga": ga,
+        "tstats": {"xg": ts.get("xg"), "yellow": ts.get("yellow", 0) or 0,
+                   "red": ts.get("red", 0) or 0},
+        "scorers": scorers, "top_rated": top_rated,
+        "history": raw["teams"].get(tid, {}).get("history"),
+    }
+    return profile, summary
+
+
 def assemble(raw):
     tourney = build_tourney_context(raw)
     summaries = {tid: team_summary(tid, raw) for tid in raw["teams"]}
     notes = {}
     for rnd in raw["bracket"]:
+        cutoff = round_seq(rnd["name"])   # include only rounds before this one
+        team_ids = {tid for m in rnd["matches"] for tid in (m.get("home_id"), m.get("away_id"))
+                    if tid in raw["teams"]}
+        rscale = round_rating_scale(team_ids, cutoff, raw)   # shared per-round bar scale
         for m in rnd["matches"]:
             h, a = m["home_id"], m["away_id"]
             if h in summaries and a in summaries:
-                notes[m["fixture_id"]] = edge_notes(summaries[h], summaries[a], raw, tourney)
+                hprof, hsum = capped_for(h, cutoff, raw)
+                aprof, asum = capped_for(a, cutoff, raw)
+                m["hprof"], m["aprof"] = hprof, aprof
+                m["cutoff_round"] = rnd["name"]
+                m["rscale"] = rscale
+                notes[m["fixture_id"]] = edge_notes(hsum, asum, raw, tourney)
     return {
         "meta": {
             "generated": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -619,13 +726,17 @@ table.mini th{text-align:left;color:var(--muted);font-weight:600;font-size:10px;
   letter-spacing:.3px;padding:3px 4px;border-bottom:1px solid var(--line)}
 table.mini td{padding:3px 4px;border-bottom:1px solid #f0f2f5}
 table.mini td.n,table.mini th.n{text-align:right}
+table.mini th.rt,table.mini td.rt{text-align:left;padding-left:12px}
+table.mini .wx{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+table.mini svg{width:12px;height:12px;flex:none;vertical-align:middle}
 .pill{display:inline-block;width:15px;height:15px;border-radius:3px;color:#fff;font-size:9px;
   font-weight:800;text-align:center;line-height:15px;margin-right:2px}
 .pW{background:var(--win)}.pD{background:var(--draw)}.pL{background:var(--loss)}
 .rating{font-weight:800;padding:1px 5px;border-radius:4px;color:#fff;font-size:11px}
-.rbar{display:inline-flex;align-items:center;gap:5px;justify-content:flex-end}
-.rbar .track{width:34px;height:6px;background:#eef1f5;border-radius:3px;overflow:hidden}
-.rbar .fill{height:100%;border-radius:3px}
+.rbar{display:inline-flex;align-items:center;gap:6px;justify-content:flex-start}
+.rbar .track{position:relative;width:50px;height:7px;background:#eef1f5;border-radius:3px}
+.rbar .fill{position:absolute;left:0;top:0;height:100%;border-radius:3px 0 0 3px}
+.rbar .mark{position:absolute;top:-2px;width:2px;height:11px;border-radius:1px}
 .rbar .rv{font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;min-width:20px;text-align:right}
 .posrow{display:grid;grid-template-columns:20px 1fr;gap:7px;align-items:start;margin-bottom:4px}
 .posrow .plab{font-size:10px;font-weight:800;color:var(--gold);padding-top:3px}
@@ -683,19 +794,37 @@ footer{color:var(--muted);font-size:11px;text-align:center;padding:14px}
 <script>
 const DATA = /*__DATA__*/;
 const T = DATA.teams, S = DATA.summaries, N = DATA.notes;
-let activeRound = 0, selFixture = null;
+// Open on the round in play: the first round that still has an unfinished match.
+// If every round is complete (tournament over), land on the last round.
+function defaultRound(){
+  for(let i=0;i<DATA.bracket.length;i++){
+    if(DATA.bracket[i].matches.some(m=>!m.finished)) return i;
+  }
+  return Math.max(0, DATA.bracket.length-1);
+}
+let activeRound = defaultRound(), selFixture = null;
+let RSCALE = null;   // {min,max} rating range of the selected tie's round (all its teams)
 
 function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function logo(t){
   if(t && t.logo) return `<img src="${t.logo}" alt="" onerror="this.outerHTML='<span class=flag-fallback>${esc((t.code||'').slice(0,3))}</span>'">`;
   return `<span class="flag-fallback">${esc((t&&t.code||'').slice(0,3))}</span>`;
 }
-function ratingColor(r){ if(r==null) return '#9aa6b2'; if(r>=7.5) return '#2e8b57'; if(r>=7.0) return '#5a9e4f'; if(r>=6.5) return '#caa53a'; return '#c0504d'; }
 function rtg(r){ return r==null?'—':Number(r).toFixed(1); }
-function ratingBar(r){
+// Rating bar scaled to the round's field: 0% = lowest-rated player across all
+// teams in this round, 100% = highest. Filled in the team's colour (navy home /
+// gold away, matching the team-name underline); the number stays plain text.
+function ratingBar(r, color){
   if(r==null) return '<span class="rbar"><span class="rv" style="color:var(--muted)">—</span></span>';
-  const pct=Math.max(6,Math.min(100,(r-5)/(9-5)*100));
-  return `<span class="rbar"><span class="track"><span class="fill" style="width:${pct}%;background:${ratingColor(r)}"></span></span><span class="rv">${Number(r).toFixed(1)}</span></span>`;
+  const sc = (RSCALE && RSCALE.max>RSCALE.min) ? RSCALE : {min:5,max:9};
+  const pos = Math.max(0, Math.min(1, (r-sc.min)/(sc.max-sc.min)));
+  const pct = Math.round(pos*100);
+  const col = color || 'var(--navy)';
+  const tip = `${Number(r).toFixed(1)} · round field ${Number(sc.min).toFixed(1)}–${Number(sc.max).toFixed(1)}`;
+  return `<span class="rbar" title="${tip}"><span class="track">`
+    + `<span class="fill" style="width:${Math.max(4,pct)}%;background:${col}"></span>`
+    + `<span class="mark" style="left:calc(${pct}% - 1px);background:${col}"></span>`
+    + `</span><span class="rv">${Number(r).toFixed(1)}</span></span>`;
 }
 function tempF(c){ return c==null?null:Math.round(c*9/5+32); }
 function wxIcon(code){
@@ -711,7 +840,7 @@ function wxIcon(code){
   else if(code>=95) g=storm;
   else if(code>=71&&code<=77) g=cloud;
   else g=rain;
-  return g?`<svg viewBox="0 0 12 13" aria-hidden="true">${g}</svg>`:'';
+  return g?`<svg width="12" height="13" viewBox="0 0 12 13" aria-hidden="true">${g}</svg>`:'';
 }
 
 function buildRounds(){
@@ -812,28 +941,47 @@ function statRow(lbl, hv, av, fmt){
 function formPills(matches){
   return matches.map(m=>`<span class="pill p${m.res}" title="${esc(m.opp)} ${m.gf}-${m.ga} (${m.round})">${m.res}</span>`).join('');
 }
+function roundAbbr(r){
+  const map={'Round of 32':'R32','Round of 16':'R16','Quarter-finals':'QF',
+             'Semi-finals':'SF','Final':'F','Third-place play-off':'3rd'};
+  if(map[r]) return map[r];
+  const g=/Group Stage - (\d)/.exec(r||''); if(g) return 'G'+g[1];
+  return esc(r||'');
+}
+function wxCell(wx){
+  if(!wx || wx.temp_c==null) return '<span style="color:var(--muted)">—</span>';
+  const f=tempF(wx.temp_c);
+  return `<span class="wx" title="${esc(wx.summary||'')}">${wxIcon(wx.code)}${f!=null?f+'°':''}</span>`;
+}
+// Each team's path to here: opponents in the order played, score, location, weather.
 function matchTable(s){
-  return `<table class="mini"><thead><tr><th>Opponent</th><th class="n">Result</th><th>Venue</th></tr></thead><tbody>`
-    + s.matches.map(m=>`<tr><td><span class="pill p${m.res}">${m.res}</span> ${esc(m.opp)}</td>
-        <td class="n">${m.gf}–${m.ga}</td><td style="color:var(--muted)">${esc(m.venue)}</td></tr>`).join('')
+  if(!s.matches || !s.matches.length)
+    return '<div style="color:var(--muted);font-size:11.5px">No matches played yet.</div>';
+  return `<table class="mini"><thead><tr><th>Rd</th><th>Opponent</th><th class="n">Score</th><th>Location</th><th class="n">Weather</th></tr></thead><tbody>`
+    + s.matches.map(m=>`<tr>
+        <td style="color:var(--muted);font-weight:700">${roundAbbr(m.round)}</td>
+        <td><span class="pill p${m.res}">${m.res}</span> ${esc(m.opp)}</td>
+        <td class="n">${m.gf}–${m.ga}</td>
+        <td style="color:var(--muted)">${esc(m.venue||'—')}</td>
+        <td class="n">${wxCell(m.wx)}</td></tr>`).join('')
     + `</tbody></table>`;
 }
 // ER-9: '#10 Mbappé' when a shirt number is present, name alone otherwise.
 function pn(p){ const n=(p.number!=null)?('#'+p.number):''; return `<span class="jn">${n}</span>${esc(p.name)}`; }
-function scorerTable(s){
+function scorerTable(s, color){
   if(!s.scorers.length) return '<div style="color:var(--muted);font-size:11.5px">No goal contributions recorded.</div>';
-  return `<table class="mini"><thead><tr><th>Player</th><th>Pos</th><th class="n">G</th><th class="n">A</th><th class="n" style="width:78px">Rating</th></tr></thead><tbody>`
+  return `<table class="mini"><thead><tr><th>Player</th><th>Pos</th><th class="n">G</th><th class="n">A</th><th class="rt" style="width:78px">Rating</th></tr></thead><tbody>`
     + s.scorers.map(p=>`<tr><td>${pn(p)}</td><td style="color:var(--muted)">${esc(p.pos)}</td>
         <td class="n">${p.goals}</td><td class="n">${p.assists}</td>
-        <td class="n">${ratingBar(p.rating)}</td></tr>`).join('')
+        <td class="rt">${ratingBar(p.rating, color)}</td></tr>`).join('')
     + `</tbody></table>`;
 }
-function minutesTable(s){
+function minutesTable(s, color){
   const rows=s.players.slice(0,7);
-  return `<table class="mini"><thead><tr><th>Player</th><th class="n">Apps</th><th class="n">St</th><th class="n">Min</th><th class="n" style="width:78px">Rating</th></tr></thead><tbody>`
+  return `<table class="mini"><thead><tr><th>Player</th><th class="n">Apps</th><th class="n">St</th><th class="n">MIN/GM</th><th class="rt" style="width:78px">Rating</th></tr></thead><tbody>`
     + rows.map(p=>`<tr><td>${pn(p)} <span style="color:var(--muted)">${esc(p.pos)}</span></td>
-        <td class="n">${p.apps}</td><td class="n">${p.starts}</td><td class="n">${p.minutes}</td>
-        <td class="n">${ratingBar(p.rating)}</td></tr>`).join('')
+        <td class="n">${p.apps}</td><td class="n">${p.starts}</td><td class="n">${p.apps?Math.round(p.minutes/p.apps):0}</td>
+        <td class="rt">${ratingBar(p.rating, color)}</td></tr>`).join('')
     + `</tbody></table>`;
 }
 function xiChips(s){
@@ -860,6 +1008,9 @@ function select(fid){
   const h=S[match.home_id], a=S[match.away_id];
   const cmp=document.getElementById('cmp');
   if(!h||!a){ cmp.innerHTML='<div class="cmp-empty">Teams not yet resolved for this tie.</div>'; return; }
+  // Profile/scouting reflect only games BEFORE this round (this tie excluded).
+  const hp=match.hprof||{}, ap=match.aprof||{};
+  RSCALE = match.rscale || null;   // scale rating bars to this round's field
   const pr=match.prediction;
 
   let odds='';
@@ -884,28 +1035,28 @@ function select(fid){
       <div class="cmp-hd">
         <div class="team"><span>${logo(T[match.home_id])}</span><span class="tn">${esc(h.name)}</span>
           <span class="grp">${esc(h.group||'')} · #${h.standing.rank||'?'} · ${hist(h)}</span>
-          <span>${formPills(h.matches)}</span></div>
+          <span>${formPills(hp.form||[])}</span></div>
         <div class="vs">${match.finished?`${match.home_goals}–${match.away_goals}`:'vs'}</div>
         <div class="team"><span>${logo(T[match.away_id])}</span><span class="tn">${esc(a.name)}</span>
           <span class="grp">${esc(a.group||'')} · #${a.standing.rank||'?'} · ${hist(a)}</span>
-          <span>${formPills(a.matches)}</span></div>
+          <span>${formPills(ap.form||[])}</span></div>
       </div>
       ${odds}
     </div>
     <div class="cmp-right">
-      <div class="profhd"><span class="ph">${esc(h.name)}</span><span class="pt">Tournament profile</span><span class="pa">${esc(a.name)}</span></div>
+      <div class="profhd"><span class="ph">${esc(h.name)}</span><span class="pt">Form before the ${esc(roundAbbr(match.round))}</span><span class="pa">${esc(a.name)}</span></div>
       <div class="statgrid">
-        <div class="lv">${h.standing.win}-${h.standing.draw}-${h.standing.lose}</div><div class="lbl">W-D-L</div><div class="rv">${a.standing.win}-${a.standing.draw}-${a.standing.lose}</div>
-        ${statRow('Points', h.standing.points, a.standing.points)}
-        ${statRow('Goals for', h.standing.gf, a.standing.gf)}
-        ${statRow('Goals against', h.standing.ga, a.standing.ga)}
-        ${statRow('Clean sheets', h.clean_sheets, a.clean_sheets)}
-        ${statRow('xG total', ts(h,'xg'), ts(a,'xg'))}
-        ${statRow('Shots', ts(h,'shots'), ts(a,'shots'))}
-        ${statRow('Possession', ts(h,'poss'), ts(a,'poss'),'pct')}
-        ${statRow('Yellow cards', ts(h,'yellow'), ts(a,'yellow'))}
+        <div class="lv">${hp.w}-${hp.d}-${hp.l}</div><div class="lbl">W-D-L</div><div class="rv">${ap.w}-${ap.d}-${ap.l}</div>
+        ${statRow('Points', hp.pts, ap.pts)}
+        ${statRow('Goals for', hp.gf, ap.gf)}
+        ${statRow('Goals against', hp.ga, ap.ga)}
+        ${statRow('Clean sheets', hp.cs, ap.cs)}
+        ${statRow('xG total', hp.xg, ap.xg)}
+        ${statRow('Shots', hp.shots, ap.shots)}
+        ${statRow('Possession', hp.poss, ap.poss,'pct')}
+        ${statRow('Yellow cards', hp.yellow, ap.yellow)}
       </div>
-      <div class="legend">Navy = ${esc(h.name)} · Gold = ${esc(a.name)} (share of two-team total).</div>
+      <div class="legend">Games each side played <b>before</b> the ${esc(roundAbbr(match.round))} — this tie excluded. Navy = ${esc(h.name)} · Gold = ${esc(a.name)}.</div>
     </div>
   </div>
 
@@ -922,7 +1073,7 @@ function select(fid){
   </div>
 
   <div class="sec">
-    <h3>How they got here</h3>
+    <h3>How they got here — opponents in order, with score, location & weather</h3>
     <div class="twocol">
       <div>${teamHd(match.home_id,h.name,'home')}${matchTable(h)}</div>
       <div>${teamHd(match.away_id,a.name,'away')}${matchTable(a)}</div>
@@ -932,18 +1083,18 @@ function select(fid){
   <div class="sec">
     <h3>Who's scoring</h3>
     <div class="twocol">
-      <div>${teamHd(match.home_id,h.name,'home')}${scorerTable(h)}</div>
-      <div>${teamHd(match.away_id,a.name,'away')}${scorerTable(a)}</div>
+      <div>${teamHd(match.home_id,h.name,'home')}${scorerTable(h,'var(--navy)')}</div>
+      <div>${teamHd(match.away_id,a.name,'away')}${scorerTable(a,'var(--gold)')}</div>
     </div>
   </div>
 
   <div class="sec">
     <h3>Minutes & ratings — who's carrying the load</h3>
     <div class="twocol">
-      <div>${teamHd(match.home_id,h.name,'home')}${minutesTable(h)}</div>
-      <div>${teamHd(match.away_id,a.name,'away')}${minutesTable(a)}</div>
+      <div>${teamHd(match.home_id,h.name,'home')}${minutesTable(h,'var(--navy)')}</div>
+      <div>${teamHd(match.away_id,a.name,'away')}${minutesTable(a,'var(--gold)')}</div>
     </div>
-    <div class="legend">St = starts. Sorted by minutes played.</div>
+    <div class="legend">St = starts · MIN/GM = average minutes per appearance. Sorted by total minutes played.</div>
   </div>
 
   <div class="sec">
